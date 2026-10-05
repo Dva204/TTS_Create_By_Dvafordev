@@ -20,15 +20,21 @@ public sealed class TtsApiClient : IDisposable
     public Task<SystemResponse?> GetSystemAsync(CancellationToken token) =>
         _http.GetFromJsonAsync<SystemResponse>("api/system", Json, token);
 
-    public async Task<IReadOnlyList<VoiceDto>> GetVoicesAsync(CancellationToken token) =>
-        await _http.GetFromJsonAsync<List<VoiceDto>>("api/voices", Json, token) ?? [];
+    public async Task<IReadOnlyList<VoiceDto>> GetVoicesAsync(string? q, CancellationToken token)
+    {
+        var url = string.IsNullOrWhiteSpace(q) ? "api/voices" : $"api/voices?q={Uri.EscapeDataString(q)}";
+        return await _http.GetFromJsonAsync<List<VoiceDto>>(url, Json, token) ?? [];
+    }
 
-    public async Task<VoiceDto> AddVoiceAsync(string name, string? language, string filePath, CancellationToken token)
+    public async Task<VoiceDto> AddVoiceAsync(string name, string? language, string? gender, string? description, string? id, string filePath, CancellationToken token)
     {
         await using var stream = File.OpenRead(filePath);
         using var form = new MultipartFormDataContent();
         form.Add(new StringContent(name), "name");
         if (!string.IsNullOrWhiteSpace(language)) form.Add(new StringContent(language), "language");
+        if (!string.IsNullOrWhiteSpace(gender)) form.Add(new StringContent(gender), "gender");
+        if (!string.IsNullOrWhiteSpace(description)) form.Add(new StringContent(description), "description");
+        if (!string.IsNullOrWhiteSpace(id)) form.Add(new StringContent(id), "id");
         form.Add(new StreamContent(stream), "file", Path.GetFileName(filePath));
         using var response = await _http.PostAsync("api/voices", form, token);
         await EnsureSuccessAsync(response, token);
@@ -39,6 +45,23 @@ public sealed class TtsApiClient : IDisposable
     {
         using var response = await _http.DeleteAsync($"api/voices/{Uri.EscapeDataString(id)}", token);
         await EnsureSuccessAsync(response, token);
+    }
+
+    public async Task<VoiceDto> ReplaceVoiceReferenceAsync(string id, string filePath, CancellationToken token)
+    {
+        await using var stream = File.OpenRead(filePath);
+        using var form = new MultipartFormDataContent();
+        form.Add(new StreamContent(stream), "file", Path.GetFileName(filePath));
+        using var response = await _http.PutAsync($"api/voices/{Uri.EscapeDataString(id)}/reference", form, token);
+        await EnsureSuccessAsync(response, token);
+        return (await response.Content.ReadFromJsonAsync<VoiceDto>(Json, token))!;
+    }
+
+    public async Task<JobAccepted> PreviewVoiceAsync(string id, CancellationToken token)
+    {
+        using var response = await _http.PostAsync($"api/voices/{Uri.EscapeDataString(id)}/preview", null, token);
+        await EnsureSuccessAsync(response, token);
+        return (await response.Content.ReadFromJsonAsync<JobAccepted>(Json, token))!;
     }
 
     public async Task<JobAccepted> GenerateAsync(GenerateRequest request, CancellationToken token)

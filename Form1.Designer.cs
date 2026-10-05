@@ -695,7 +695,7 @@ partial class Form1
         btnAddLibrary.FlatStyle = FlatStyle.Flat;
         btnAddLibrary.Location = new Point(14, 92);
         btnAddLibrary.Name = "btnAddLibrary";
-        btnAddLibrary.Size = new Size(115, 30);
+        btnAddLibrary.Size = new Size(105, 30);
         btnAddLibrary.TabIndex = 9;
         btnAddLibrary.Text = "+ Add to Library";
         btnAddLibrary.UseVisualStyleBackColor = false;
@@ -705,7 +705,7 @@ partial class Form1
         addVoiceButton.BackColor = Color.FromArgb(246, 235, 255);
         addVoiceButton.FlatStyle = FlatStyle.Flat;
         addVoiceButton.ForeColor = Color.FromArgb(128, 54, 172);
-        addVoiceButton.Location = new Point(135, 92);
+        addVoiceButton.Location = new Point(125, 92);
         addVoiceButton.Name = "addVoiceButton";
         addVoiceButton.Size = new Size(105, 30);
         addVoiceButton.TabIndex = 10;
@@ -715,9 +715,9 @@ partial class Form1
         // 
         // btnOpenVoiceLibrary
         // 
-        btnOpenVoiceLibrary.Location = new Point(246, 92);
+        btnOpenVoiceLibrary.Location = new Point(236, 92);
         btnOpenVoiceLibrary.Name = "btnOpenVoiceLibrary";
-        btnOpenVoiceLibrary.Size = new Size(99, 30);
+        btnOpenVoiceLibrary.Size = new Size(95, 30);
         btnOpenVoiceLibrary.TabIndex = 11;
         btnOpenVoiceLibrary.Text = "Voice Library";
         btnOpenVoiceLibrary.UseVisualStyleBackColor = true;
@@ -1095,9 +1095,9 @@ partial class Form1
         // btnAdvancedSettings
         // 
         btnAdvancedSettings.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        btnAdvancedSettings.Location = new Point(15, 97);
+        btnAdvancedSettings.Location = new Point(15, 79);
         btnAdvancedSettings.Name = "btnAdvancedSettings";
-        btnAdvancedSettings.Size = new Size(443, 28);
+        btnAdvancedSettings.Size = new Size(311, 28);
         btnAdvancedSettings.TabIndex = 6;
         btnAdvancedSettings.Text = "Advanced Settings";
         btnAdvancedSettings.UseVisualStyleBackColor = true;

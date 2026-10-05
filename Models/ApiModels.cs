@@ -16,14 +16,25 @@ public sealed record VoiceDto(
     string Id,
     string Name,
     string? Language,
+    string? Gender,
+    string? Description,
     [property: JsonPropertyName("created_at")] DateTimeOffset CreatedAt,
     [property: JsonPropertyName("reference_file")] string ReferenceFile);
+
+public sealed record TtsGenerationSettings(
+    [property: JsonPropertyName("speed")] double Speed,
+    [property: JsonPropertyName("cfg_weight")] double CfgWeight,
+    [property: JsonPropertyName("temperature")] double Temperature,
+    [property: JsonPropertyName("exaggeration")] double Exaggeration,
+    [property: JsonPropertyName("speaker_boost")] bool SpeakerBoost,
+    [property: JsonPropertyName("seed")] int? Seed = null);
 
 public sealed record GenerateRequest(
     string Text,
     [property: JsonPropertyName("voice_id")] string VoiceId,
     string Language,
-    string Engine);
+    string Engine,
+    TtsGenerationSettings? Settings = null);
 
 public sealed record JobAccepted(string Id, string Status);
 

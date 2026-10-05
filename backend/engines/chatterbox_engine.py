@@ -3,6 +3,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 from .base import TtsEngine
+from models.tts import TtsGenerationSettings
 
 
 class ChatterboxMultilingualEngine(TtsEngine):
@@ -27,7 +28,7 @@ class ChatterboxMultilingualEngine(TtsEngine):
                            "then run 'pip install chatterbox-tts==0.1.7'. Import error: " + self._import_error)
         return True, None
 
-    def generate(self, text: str, language: str, reference: Path, output: Path) -> None:
+    def generate(self, text: str, language: str, reference: Path, output: Path, settings: TtsGenerationSettings) -> None:
         ready, detail = self.available
         if not ready:
             raise RuntimeError(detail)
@@ -38,6 +39,15 @@ class ChatterboxMultilingualEngine(TtsEngine):
                     self._model = self._model_type.from_pretrained(device=device, t3_model="v3")
                 except TypeError:
                     self._model = self._model_type.from_pretrained(device=device)
-            wav = self._model.generate(text, language_id=language, audio_prompt_path=str(reference))
+            if settings.seed is not None:
+                self._torch.manual_seed(settings.seed)
+            wav = self._model.generate(
+                text, 
+                language_id=language, 
+                audio_prompt_path=str(reference),
+                exaggeration=settings.exaggeration,
+                cfg_weight=settings.cfg_weight,
+                temperature=settings.temperature
+            )
             output.parent.mkdir(parents=True, exist_ok=True)
             self._torchaudio.save(str(output), wav.detach().cpu(), self._model.sr)
