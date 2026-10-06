@@ -50,4 +50,4 @@ class ChatterboxMultilingualEngine(TtsEngine):
                 temperature=settings.temperature
             )
             output.parent.mkdir(parents=True, exist_ok=True)
-            self._torchaudio.save(str(output), wav.detach().cpu(), self._model.sr)
+            self._torchaudio.save(str(output), wav.detach().cpu(), self._model.sr, encoding="PCM_S", bits_per_sample=16)

@@ -46,8 +46,57 @@ public partial class Form1 : Form
         if (Controls.Find("btnLibrarySearch", true).FirstOrDefault() is Button btnLibSearch) btnLibSearch.Click += BtnLibrarySearch_Click;
         if (Controls.Find("btnLibraryRefresh", true).FirstOrDefault() is Button btnLibRefresh) btnLibRefresh.Click += BtnLibraryRefresh_Click;
         
+        if (Controls.Find("btnBrowseVoiceFile", true).FirstOrDefault() is Button btnBrowseVoice) btnBrowseVoice.Click += BtnBrowseVoiceFile_Click;
+        if (Controls.Find("btnPreviewNewVoice", true).FirstOrDefault() is Button btnPreviewNew) btnPreviewNew.Click += BtnPreviewNewVoice_Click;
+        if (Controls.Find("btnSaveNewVoice", true).FirstOrDefault() is Button btnSaveNew) btnSaveNew.Click += BtnSaveNewVoice_Click;
+        if (Controls.Find("btnClearNewVoice", true).FirstOrDefault() is Button btnClearNew) btnClearNew.Click += BtnClearNewVoice_Click;
+        if (Controls.Find("btnLibraryAddVoice", true).FirstOrDefault() is Button btnLibAddVoice) btnLibAddVoice.Click += BtnLibraryAddVoice_Click;
+        
         if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView dgvVoice) dgvVoice.SelectionChanged += DgvVoiceLibrary_SelectionChanged;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ==========================================
+    // Form Lifecycle & Common
+    // ==========================================
+    #region Form Lifecycle & Common
 
     private async void Form1_Load(object sender, EventArgs e)
     {
@@ -147,6 +196,49 @@ public partial class Form1 : Form
             }
         }
     }
+
+    private void SetBusy(bool busy)
+    {
+        addVoiceButton.Enabled = generateButton.Enabled = !busy;
+    }
+
+    private void WriteLog(string message)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { BeginInvoke(() => WriteLog(message)); return; }
+        logsTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+    }
+
+    private void ShowError(Exception ex)
+    {
+        WriteLog("ERROR: " + ex.Message);
+        MessageBox.Show(this, ex.Message, "TTS Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+
+    private void CleanupAudio()
+    {
+        if (audioFile is not null)
+            try { File.Delete(audioFile); } catch { }
+
+        audioFile = null;
+        playButton.Enabled = saveWavButton.Enabled = false;
+    }
+
+    private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
+    {
+        lifetime.Cancel();
+        generation?.Cancel();
+        CleanupAudio();
+        await backend.DisposeAsync();
+        api.Dispose();
+    }
+    #endregion
+
+
+    // ==========================================
+    // TAB: TTS / Batch
+    // ==========================================
+    #region TAB: TTS / Batch
 
     private async void AddVoiceButton_Click(object sender, EventArgs e)
     {
@@ -267,48 +359,6 @@ public partial class Form1 : Form
         using var dialog = new SaveFileDialog { Filter = "WAV audio|*.wav", FileName = $"tts-{DateTime.Now:yyyyMMdd-HHmmss}.wav" };
         if (dialog.ShowDialog(this) == DialogResult.OK)
             File.Copy(audioFile, dialog.FileName, true);
-    }
-
-    private void SetBusy(bool busy)
-    {
-        addVoiceButton.Enabled = generateButton.Enabled = !busy;
-    }
-
-    private void SetGenerating(bool active)
-    {
-        SetBusy(active);
-        stopButton.Enabled = active;
-    }
-
-    private void WriteLog(string message)
-    {
-        if (IsDisposed) return;
-        if (InvokeRequired) { BeginInvoke(() => WriteLog(message)); return; }
-        logsTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
-    }
-
-    private void ShowError(Exception ex)
-    {
-        WriteLog("ERROR: " + ex.Message);
-        MessageBox.Show(this, ex.Message, "TTS Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
-    }
-
-    private void CleanupAudio()
-    {
-        if (audioFile is not null)
-            try { File.Delete(audioFile); } catch { }
-
-        audioFile = null;
-        playButton.Enabled = saveWavButton.Enabled = false;
-    }
-
-    private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
-    {
-        lifetime.Cancel();
-        generation?.Cancel();
-        CleanupAudio();
-        await backend.DisposeAsync();
-        api.Dispose();
     }
 
 private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
@@ -526,7 +576,13 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
             SetBusy(false);
         }
     }
+    #endregion
 
+
+    // ==========================================
+    // TAB: Video Editor
+    // ==========================================
+    #region TAB: Video Editor
 
 private void BtnBrowseVideoAudio_Click(object? sender, EventArgs e)
     {
@@ -716,7 +772,13 @@ private void BtnBrowseVideoAudio_Click(object? sender, EventArgs e)
             SetBusy(false);
         }
     }
+    #endregion
 
+
+    // ==========================================
+    // TAB: Voice Library
+    // ==========================================
+    #region TAB: Voice Library
 
 private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
     {
@@ -728,12 +790,12 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
             SetBusy(true);
             try {
                 WriteLog($"Generating preview for {v.Name}...");
-                var req = new GenerateRequest(txt.Text, v.Id, "en", engineComboBox.Text, new TtsGenerationSettings(100, 50, 80, 50, true));
+                var req = new GenerateRequest(txt.Text, v.Id, "en", engineComboBox.Text, new TtsGenerationSettings(1.0, 0.5, 0.8, 0.5, true));
                 var job = await api.GenerateAsync(req, lifetime.Token);
                 while(true) {
                     await Task.Delay(500, lifetime.Token);
                     var status = await api.GetJobAsync(job.Id, lifetime.Token);
-                    if (status?.Status == "failed") throw new Exception("Preview failed");
+                    if (status?.Status == "failed") throw new Exception($"Preview failed: {status.Error}");
                     if (status?.Status == "completed") {
                         var audio = await new HttpClient().GetByteArrayAsync(new Uri(settings.BackendUri, $"api/jobs/{job.Id}/audio"));
                         var temp = Path.GetTempFileName() + ".wav";
@@ -807,39 +869,34 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
         }
     }
 
-
-
     private void DgvVoiceLibrary_SelectionChanged(object? sender, EventArgs e)
     {
         var dgv = sender as DataGridView;
         if (dgv?.SelectedRows.Count > 0 && dgv.SelectedRows[0].Tag is VoiceDto v)
         {
-            if (Controls.Find("lblSelectedVoiceNameText", true).FirstOrDefault() is Label lblName) lblName.Text = v.Name;
-            if (Controls.Find("txtSelectedVoiceId", true).FirstOrDefault() is TextBox txtId) txtId.Text = v.Id;
-            if (Controls.Find("lblSelectedVoiceLanguageText", true).FirstOrDefault() is Label lblLang) lblLang.Text = v.Language ?? "N/A";
-            if (Controls.Find("lblSelectedVoiceGenderText", true).FirstOrDefault() is Label lblGender) lblGender.Text = v.Gender ?? "N/A";
-            if (Controls.Find("txtSelectedVoiceDescription", true).FirstOrDefault() is TextBox txtDesc) txtDesc.Text = v.Description ?? "";
+            lblSelectedVoiceName.Text = v.Name;
+            txtSelectedVoiceId.Text = v.Id;
+            lblSelectedVoiceLanguage.Text = v.Language ?? "N/A";
+            lblSelectedVoiceGender.Text = v.Gender ?? "N/A";
+            txtSelectedVoiceDescription.Text = v.Description ?? "";
             
             // Check if reference exists
-            var refPath = Path.Combine("backend", "data", "voices", v.Id, "reference.wav");
-            if (Controls.Find("txtReferenceAudio", true).FirstOrDefault() is TextBox txtRef) 
-                txtRef.Text = File.Exists(refPath) ? "reference.wav" : "None";
+            txtReferenceAudio.Text = string.IsNullOrEmpty(v.ReferenceFile) ? "None" : "reference.wav";
         }
     }
 
-    private void BtnPlayReference_Click(object? sender, EventArgs e)
+    private async void BtnPlayReference_Click(object? sender, EventArgs e)
     {
         var dgv = Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() as DataGridView;
         if (dgv?.SelectedRows.Count > 0 && dgv.SelectedRows[0].Tag is VoiceDto v)
         {
-            var refPath = Path.Combine("backend", "data", "voices", v.Id, "reference.wav");
-            if (File.Exists(refPath))
-            {
-                try {
-                    new System.Media.SoundPlayer(refPath).Play();
-                } catch (Exception ex) {
-                    WriteLog("Error playing reference: " + ex.Message);
-                }
+            if (string.IsNullOrEmpty(v.ReferenceFile)) return;
+            try {
+                var audio = await new HttpClient().GetByteArrayAsync(new Uri(settings.BackendUri, $"api/voices/{v.Id}/reference"));
+                using var ms = new MemoryStream(audio);
+                new System.Media.SoundPlayer(ms).Play();
+            } catch (Exception ex) {
+                WriteLog("Error playing reference: " + ex.Message);
             }
         }
     }
@@ -856,5 +913,114 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
         if (txtSearch != null) txtSearch.Text = "";
         await RefreshVoices(null, lifetime.Token);
     }
+
+    private void BtnBrowseVoiceFile_Click(object? sender, EventArgs e)
+    {
+        using var dialog = new OpenFileDialog { Filter = "Audio (*.wav;*.mp3;*.m4a;*.flac)|*.wav;*.mp3;*.m4a;*.flac" };
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            if (Controls.Find("txtNewVoiceFile", true).FirstOrDefault() is TextBox txt) txt.Text = dialog.FileName;
+        }
+    }
+
+    private void BtnPreviewNewVoice_Click(object? sender, EventArgs e)
+    {
+        var txt = Controls.Find("txtNewVoiceFile", true).FirstOrDefault() as TextBox;
+        if (txt != null && File.Exists(txt.Text))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(txt.Text) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                WriteLog("Error playing preview: " + ex.Message);
+            }
+        }
+    }
+
+    private void BtnClearNewVoice_Click(object? sender, EventArgs e)
+    {
+        if (Controls.Find("txtNewVoiceName", true).FirstOrDefault() is TextBox txtName) txtName.Text = "";
+        if (Controls.Find("txtNewVoiceId", true).FirstOrDefault() is TextBox txtId) txtId.Text = "";
+        if (Controls.Find("cmbNewVoiceLanguage", true).FirstOrDefault() is ComboBox cmbLang) cmbLang.SelectedIndex = -1;
+        if (Controls.Find("cmbNewVoiceGender", true).FirstOrDefault() is ComboBox cmbGender) cmbGender.SelectedIndex = -1;
+        if (Controls.Find("txtNewVoiceDescription", true).FirstOrDefault() is TextBox txtDesc) txtDesc.Text = "";
+        if (Controls.Find("txtNewVoiceFile", true).FirstOrDefault() is TextBox txtFile) txtFile.Text = "";
+    }
+
+    private async void BtnSaveNewVoice_Click(object? sender, EventArgs e)
+    {
+        var txtName = Controls.Find("txtNewVoiceName", true).FirstOrDefault() as TextBox;
+        var txtVoiceId = Controls.Find("txtNewVoiceId", true).FirstOrDefault() as TextBox;
+        var cmbLang = Controls.Find("cmbNewVoiceLanguage", true).FirstOrDefault() as ComboBox;
+        var cmbGender = Controls.Find("cmbNewVoiceGender", true).FirstOrDefault() as ComboBox;
+        var txtDesc = Controls.Find("txtNewVoiceDescription", true).FirstOrDefault() as TextBox;
+        var txtFile = Controls.Find("txtNewVoiceFile", true).FirstOrDefault() as TextBox;
+
+        var name = txtName?.Text?.Trim();
+        var voiceId = txtVoiceId?.Text?.Trim();
+        if (string.IsNullOrEmpty(voiceId)) voiceId = null;
+        var lang = cmbLang?.Text?.Trim();
+        var gender = cmbGender?.Text?.Trim();
+        var desc = txtDesc?.Text?.Trim();
+        var filePath = txtFile?.Text?.Trim();
+
+        if (string.IsNullOrEmpty(name))
+        {
+            MessageBox.Show(this, "Voice name is required.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+        {
+            MessageBox.Show(this, "Please select a valid audio file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        SetBusy(true);
+        try
+        {
+            var voice = await api.AddVoiceAsync(name, lang, gender, desc, voiceId, filePath, lifetime.Token);
+            await RefreshVoices(null, lifetime.Token);
+            
+            BtnClearNewVoice_Click(null, EventArgs.Empty);
+
+            if (voice is not null)
+                voiceComboBox.SelectedValue = voice.Id;
+
+            WriteLog($"Added new voice: {voice?.Name ?? name}");
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private void BtnLibraryAddVoice_Click(object? sender, EventArgs e)
+    {
+        if (Controls.Find("txtNewVoiceName", true).FirstOrDefault() is TextBox txtName)
+        {
+            txtName.Focus();
+        }
+    }
+    #endregion
+
+    // ==========================================
+    // Other
+    // ==========================================
+    #region Other
+
+    private void SetGenerating(bool active)
+    {
+        SetBusy(active);
+        stopButton.Enabled = active;
+    }
+    #endregion
+
 }
 

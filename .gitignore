@@ -1,4 +1,4 @@
-﻿# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -37,3 +37,15 @@ pip-log
 bin/
 obj/
 *.user
+
+# Audio / Media files
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+*.aac
+
+# TTS Backend Data Output
+backend/data/jobs/
+backend/data/voices/

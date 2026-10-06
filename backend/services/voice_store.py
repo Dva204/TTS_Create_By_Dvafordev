@@ -110,7 +110,7 @@ class VoiceStore:
         return result
 
     def _safe_dir(self, voice_id: str) -> Path:
-        if not voice_id or any(c not in "0123456789abcdef" for c in voice_id.lower()):
+        if not voice_id or not all(c.isalnum() or c in "-_" for c in voice_id):
             raise ValueError("Invalid voice id.")
         path = (self.root / voice_id).resolve()
         if self.root.resolve() not in path.parents:

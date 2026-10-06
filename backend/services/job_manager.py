@@ -43,23 +43,24 @@ class JobManager:
                 if settings.speaker_boost:
                     filters.append("loudnorm")
                 
-                if filters:
-                    ffmpeg = shutil.which("ffmpeg")
-                    if ffmpeg:
-                        filter_str = ",".join(filters)
-                        temp_out = output.with_suffix(".tmp.wav")
-                        # Run ffmpeg in thread
-                        def _process():
-                            subprocess.run(
-                                [ffmpeg, "-y", "-i", str(output), "-af", filter_str, str(temp_out)],
-                                capture_output=True, check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                            )
-                            shutil.move(temp_out, output)
-                        
-                        try:
-                            await asyncio.to_thread(_process)
-                        except subprocess.CalledProcessError:
-                            pass # If post-processing fails, just keep the original file
+                ffmpeg = shutil.which("ffmpeg")
+                if ffmpeg:
+                    temp_out = output.with_suffix(".tmp.wav")
+                    args = [ffmpeg, "-y", "-i", str(output)]
+                    if filters:
+                        args.extend(["-af", ",".join(filters)])
+                    args.extend(["-ar", "24000", "-c:a", "pcm_s16le", str(temp_out)])
+                    
+                    def _process():
+                        subprocess.run(
+                            args, capture_output=True, check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                        )
+                        shutil.move(temp_out, output)
+                    
+                    try:
+                        await asyncio.to_thread(_process)
+                    except subprocess.CalledProcessError as e:
+                        raise RuntimeError(f"FFmpeg failed: {e.stderr.decode('utf-8', errors='replace')}") from e
 
                 job["status"], job["audio_url"] = "completed", f"/api/jobs/{job_id}/audio"
         except asyncio.CancelledError:

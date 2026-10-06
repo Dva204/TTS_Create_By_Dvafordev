@@ -1,4 +1,4 @@
-﻿#nullable enable
+#nullable enable
 
 namespace TTS_Create_By_DvaForDev;
 
@@ -150,6 +150,8 @@ partial class Form1
     private TableLayoutPanel addVoiceLayout = null!;
     private Label lblNewVoiceName = null!;
     private TextBox txtNewVoiceName = null!;
+    private Label lblNewVoiceId = null!;
+    private TextBox txtNewVoiceId = null!;
     private Label lblNewVoiceLanguage = null!;
     private ComboBox cmbNewVoiceLanguage = null!;
     private Label lblNewVoiceGender = null!;
@@ -394,6 +396,8 @@ partial class Form1
         addVoiceLayout = new TableLayoutPanel();
         lblNewVoiceName = new Label();
         txtNewVoiceName = new TextBox();
+        lblNewVoiceId = new Label();
+        txtNewVoiceId = new TextBox();
         lblNewVoiceLanguage = new Label();
         cmbNewVoiceLanguage = new ComboBox();
         lblNewVoiceGender = new Label();
@@ -1882,20 +1886,23 @@ partial class Form1
         addVoiceLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44F));
         addVoiceLayout.Controls.Add(lblNewVoiceName, 0, 0);
         addVoiceLayout.Controls.Add(txtNewVoiceName, 1, 0);
-        addVoiceLayout.Controls.Add(lblNewVoiceLanguage, 0, 1);
-        addVoiceLayout.Controls.Add(cmbNewVoiceLanguage, 1, 1);
-        addVoiceLayout.Controls.Add(lblNewVoiceGender, 0, 2);
-        addVoiceLayout.Controls.Add(cmbNewVoiceGender, 1, 2);
-        addVoiceLayout.Controls.Add(lblNewVoiceDescription, 0, 3);
-        addVoiceLayout.Controls.Add(txtNewVoiceDescription, 1, 3);
-        addVoiceLayout.Controls.Add(lblNewVoiceFile, 0, 4);
-        addVoiceLayout.Controls.Add(txtNewVoiceFile, 1, 4);
-        addVoiceLayout.Controls.Add(btnBrowseVoiceFile, 2, 4);
-        addVoiceLayout.Controls.Add(pnlAddVoiceActions, 0, 5);
+        addVoiceLayout.Controls.Add(lblNewVoiceId, 0, 1);
+        addVoiceLayout.Controls.Add(txtNewVoiceId, 1, 1);
+        addVoiceLayout.Controls.Add(lblNewVoiceLanguage, 0, 2);
+        addVoiceLayout.Controls.Add(cmbNewVoiceLanguage, 1, 2);
+        addVoiceLayout.Controls.Add(lblNewVoiceGender, 0, 3);
+        addVoiceLayout.Controls.Add(cmbNewVoiceGender, 1, 3);
+        addVoiceLayout.Controls.Add(lblNewVoiceDescription, 0, 4);
+        addVoiceLayout.Controls.Add(txtNewVoiceDescription, 1, 4);
+        addVoiceLayout.Controls.Add(lblNewVoiceFile, 0, 5);
+        addVoiceLayout.Controls.Add(txtNewVoiceFile, 1, 5);
+        addVoiceLayout.Controls.Add(btnBrowseVoiceFile, 2, 5);
+        addVoiceLayout.Controls.Add(pnlAddVoiceActions, 0, 6);
         addVoiceLayout.Dock = DockStyle.Fill;
         addVoiceLayout.Location = new Point(10, 26);
         addVoiceLayout.Name = "addVoiceLayout";
-        addVoiceLayout.RowCount = 6;
+        addVoiceLayout.RowCount = 7;
+        addVoiceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31F));
         addVoiceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31F));
         addVoiceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31F));
         addVoiceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31F));
@@ -1925,10 +1932,30 @@ partial class Form1
         txtNewVoiceName.Size = new Size(292, 23);
         txtNewVoiceName.TabIndex = 1;
         // 
+        // lblNewVoiceId
+        // 
+        lblNewVoiceId.Dock = DockStyle.Fill;
+        lblNewVoiceId.Location = new Point(3, 31);
+        lblNewVoiceId.Name = "lblNewVoiceId";
+        lblNewVoiceId.Size = new Size(80, 31);
+        lblNewVoiceId.TabIndex = 20;
+        lblNewVoiceId.Text = "Voice ID:";
+        lblNewVoiceId.TextAlign = ContentAlignment.MiddleLeft;
+        // 
+        // txtNewVoiceId
+        // 
+        addVoiceLayout.SetColumnSpan(txtNewVoiceId, 2);
+        txtNewVoiceId.Dock = DockStyle.Fill;
+        txtNewVoiceId.Location = new Point(89, 35);
+        txtNewVoiceId.Margin = new Padding(3, 4, 3, 4);
+        txtNewVoiceId.Name = "txtNewVoiceId";
+        txtNewVoiceId.Size = new Size(292, 23);
+        txtNewVoiceId.TabIndex = 21;
+        // 
         // lblNewVoiceLanguage
         // 
         lblNewVoiceLanguage.Dock = DockStyle.Fill;
-        lblNewVoiceLanguage.Location = new Point(3, 31);
+        lblNewVoiceLanguage.Location = new Point(3, 62);
         lblNewVoiceLanguage.Name = "lblNewVoiceLanguage";
         lblNewVoiceLanguage.Size = new Size(80, 31);
         lblNewVoiceLanguage.TabIndex = 2;
@@ -1941,7 +1968,7 @@ partial class Form1
         cmbNewVoiceLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
         cmbNewVoiceLanguage.FormattingEnabled = true;
         cmbNewVoiceLanguage.Items.AddRange(new object[] { "en", "vi", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh" });
-        cmbNewVoiceLanguage.Location = new Point(89, 35);
+        cmbNewVoiceLanguage.Location = new Point(89, 66);
         cmbNewVoiceLanguage.Margin = new Padding(3, 4, 3, 4);
         cmbNewVoiceLanguage.Name = "cmbNewVoiceLanguage";
         cmbNewVoiceLanguage.Size = new Size(248, 23);
@@ -1950,7 +1977,7 @@ partial class Form1
         // lblNewVoiceGender
         // 
         lblNewVoiceGender.Dock = DockStyle.Fill;
-        lblNewVoiceGender.Location = new Point(3, 62);
+        lblNewVoiceGender.Location = new Point(3, 93);
         lblNewVoiceGender.Name = "lblNewVoiceGender";
         lblNewVoiceGender.Size = new Size(80, 31);
         lblNewVoiceGender.TabIndex = 4;
@@ -1963,7 +1990,7 @@ partial class Form1
         cmbNewVoiceGender.DropDownStyle = ComboBoxStyle.DropDownList;
         cmbNewVoiceGender.FormattingEnabled = true;
         cmbNewVoiceGender.Items.AddRange(new object[] { "Unknown", "Male", "Female" });
-        cmbNewVoiceGender.Location = new Point(89, 66);
+        cmbNewVoiceGender.Location = new Point(89, 97);
         cmbNewVoiceGender.Margin = new Padding(3, 4, 3, 4);
         cmbNewVoiceGender.Name = "cmbNewVoiceGender";
         cmbNewVoiceGender.Size = new Size(248, 23);
@@ -1972,7 +1999,7 @@ partial class Form1
         // lblNewVoiceDescription
         // 
         lblNewVoiceDescription.Dock = DockStyle.Fill;
-        lblNewVoiceDescription.Location = new Point(3, 93);
+        lblNewVoiceDescription.Location = new Point(3, 124);
         lblNewVoiceDescription.Name = "lblNewVoiceDescription";
         lblNewVoiceDescription.Size = new Size(80, 54);
         lblNewVoiceDescription.TabIndex = 6;
@@ -1983,7 +2010,7 @@ partial class Form1
         // 
         addVoiceLayout.SetColumnSpan(txtNewVoiceDescription, 2);
         txtNewVoiceDescription.Dock = DockStyle.Fill;
-        txtNewVoiceDescription.Location = new Point(89, 96);
+        txtNewVoiceDescription.Location = new Point(89, 127);
         txtNewVoiceDescription.Multiline = true;
         txtNewVoiceDescription.Name = "txtNewVoiceDescription";
         txtNewVoiceDescription.ScrollBars = ScrollBars.Vertical;
@@ -1993,7 +2020,7 @@ partial class Form1
         // lblNewVoiceFile
         // 
         lblNewVoiceFile.Dock = DockStyle.Fill;
-        lblNewVoiceFile.Location = new Point(3, 147);
+        lblNewVoiceFile.Location = new Point(3, 178);
         lblNewVoiceFile.Name = "lblNewVoiceFile";
         lblNewVoiceFile.Size = new Size(80, 34);
         lblNewVoiceFile.TabIndex = 8;
@@ -2003,7 +2030,7 @@ partial class Form1
         // txtNewVoiceFile
         // 
         txtNewVoiceFile.Dock = DockStyle.Fill;
-        txtNewVoiceFile.Location = new Point(89, 152);
+        txtNewVoiceFile.Location = new Point(89, 183);
         txtNewVoiceFile.Margin = new Padding(3, 5, 3, 4);
         txtNewVoiceFile.Name = "txtNewVoiceFile";
         txtNewVoiceFile.ReadOnly = true;
@@ -2013,7 +2040,7 @@ partial class Form1
         // btnBrowseVoiceFile
         // 
         btnBrowseVoiceFile.Dock = DockStyle.Fill;
-        btnBrowseVoiceFile.Location = new Point(343, 150);
+        btnBrowseVoiceFile.Location = new Point(343, 181);
         btnBrowseVoiceFile.Name = "btnBrowseVoiceFile";
         btnBrowseVoiceFile.Size = new Size(38, 28);
         btnBrowseVoiceFile.TabIndex = 10;
@@ -2027,10 +2054,10 @@ partial class Form1
         pnlAddVoiceActions.Controls.Add(btnSaveNewVoice);
         pnlAddVoiceActions.Controls.Add(btnClearNewVoice);
         pnlAddVoiceActions.Dock = DockStyle.Fill;
-        pnlAddVoiceActions.Location = new Point(3, 184);
+        pnlAddVoiceActions.Location = new Point(3, 215);
         pnlAddVoiceActions.Name = "pnlAddVoiceActions";
         pnlAddVoiceActions.Padding = new Padding(0, 7, 0, 0);
-        pnlAddVoiceActions.Size = new Size(378, 84);
+        pnlAddVoiceActions.Size = new Size(378, 53);
         pnlAddVoiceActions.TabIndex = 11;
         pnlAddVoiceActions.WrapContents = false;
         // 
