@@ -800,7 +800,7 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
                         var audio = await new HttpClient().GetByteArrayAsync(new Uri(settings.BackendUri, $"api/jobs/{job.Id}/audio"));
                         var temp = Path.GetTempFileName() + ".wav";
                         await File.WriteAllBytesAsync(temp, audio, lifetime.Token);
-                        new System.Media.SoundPlayer(temp).Play();
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = temp, UseShellExecute = true });
                         break;
                     }
                 }
@@ -893,8 +893,9 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
             if (string.IsNullOrEmpty(v.ReferenceFile)) return;
             try {
                 var audio = await new HttpClient().GetByteArrayAsync(new Uri(settings.BackendUri, $"api/voices/{v.Id}/reference"));
-                using var ms = new MemoryStream(audio);
-                new System.Media.SoundPlayer(ms).Play();
+                var temp = Path.GetTempFileName() + ".wav";
+                await File.WriteAllBytesAsync(temp, audio);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = temp, UseShellExecute = true });
             } catch (Exception ex) {
                 WriteLog("Error playing reference: " + ex.Message);
             }
