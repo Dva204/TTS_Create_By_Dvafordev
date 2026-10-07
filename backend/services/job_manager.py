@@ -70,9 +70,16 @@ class JobManager:
 
     def cancel(self, job_id: str) -> bool:
         task = self.tasks.get(job_id)
-        if not task or task.done():
-            return False
-        task.cancel()
+        if task and not task.done():
+            task.cancel()
+        
+        self.jobs.pop(job_id, None)
+        self.tasks.pop(job_id, None)
+        path = self.root / f"{job_id}.wav"
+        if path.is_file():
+            try: path.unlink()
+            except OSError: pass
+            
         return True
 
     def audio(self, job_id: str) -> Path:

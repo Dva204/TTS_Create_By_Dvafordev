@@ -70,6 +70,7 @@ partial class Form1
     private CheckBox chkAutoSplit = null!;
     private CheckBox chkSkipExisting = null!;
     private CheckBox chkAutoJoin = null!;
+    private CheckBox chkDeleteSegments = null!;
     private Label lblSplitChars = null!;
     private TextBox txtSplitChars = null!;
     private Button btnAdvancedSettings = null!;
@@ -79,6 +80,7 @@ partial class Form1
     private Button stopButton = null!;
     private Button btnImportFile = null!;
     private Button btnImportFolder = null!;
+    private Button btnClearList = null!;
     private Button btnImportVoice = null!;
     private Button btnOpenAudioOutput = null!;
     private Button btnCreateSrt = null!;
@@ -326,20 +328,21 @@ partial class Form1
         chkAutoSplit = new CheckBox();
         chkSkipExisting = new CheckBox();
         chkAutoJoin = new CheckBox();
+        chkDeleteSegments = new CheckBox();
         lblSplitChars = new Label();
         txtSplitChars = new TextBox();
         btnAdvancedSettings = new Button();
         pnlToolbar = new FlowLayoutPanel();
-        generateButton = new Button();
-        stopButton = new Button();
         btnImportFile = new Button();
         btnImportFolder = new Button();
-        btnImportVoice = new Button();
-        btnOpenAudioOutput = new Button();
-        btnCreateSrt = new Button();
+        btnClearList = new Button();
         btnJoinMp3 = new Button();
+        btnCreateSrt = new Button();
+        btnOpenAudioOutput = new Button();
+        generateButton = new Button();
         playButton = new Button();
         saveWavButton = new Button();
+        stopButton = new Button();
         statusLayout = new TableLayoutPanel();
         lblSubtitleStatus = new Label();
         lblCurrentJob = new Label();
@@ -476,6 +479,7 @@ partial class Form1
         lblMp3Bitrate = new Label();
         cmbMp3Bitrate = new ComboBox();
         btnSaveSettings = new Button();
+        btnImportVoice = new Button();
         mainTabControl.SuspendLayout();
         tabTtsBatch.SuspendLayout();
         ttsRootLayout.SuspendLayout();
@@ -797,7 +801,7 @@ partial class Form1
         numStability.Name = "numStability";
         numStability.Size = new Size(75, 23);
         numStability.TabIndex = 4;
-        numStability.Value = new decimal(new int[] { 50, 0, 0, 0 });
+        numStability.Value = new decimal(new int[] { 65, 0, 0, 0 });
         // 
         // lblSimilarity
         // 
@@ -814,7 +818,7 @@ partial class Form1
         numSimilarity.Name = "numSimilarity";
         numSimilarity.Size = new Size(75, 23);
         numSimilarity.TabIndex = 6;
-        numSimilarity.Value = new decimal(new int[] { 80, 0, 0, 0 });
+        numSimilarity.Value = new decimal(new int[] { 60, 0, 0, 0 });
         // 
         // lblStyle
         // 
@@ -974,12 +978,13 @@ partial class Form1
         txtBatchFolder.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         txtBatchFolder.Location = new Point(64, 27);
         txtBatchFolder.Name = "txtBatchFolder";
-        txtBatchFolder.Size = new Size(1084, 23);
+        txtBatchFolder.Size = new Size(775, 23);
         txtBatchFolder.TabIndex = 1;
         // 
         // btnBrowseFolder
         // 
-        btnBrowseFolder.Location = new Point(462, 26);
+        btnBrowseFolder.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnBrowseFolder.Location = new Point(845, 26);
         btnBrowseFolder.Name = "btnBrowseFolder";
         btnBrowseFolder.Size = new Size(38, 25);
         btnBrowseFolder.TabIndex = 2;
@@ -998,12 +1003,16 @@ partial class Form1
         // 
         // btnRunBatch
         // 
-        btnRunBatch.Location = new Point(190, 66);
+        btnRunBatch.BackColor = Color.FromArgb(232, 248, 235);
+        btnRunBatch.FlatStyle = FlatStyle.Flat;
+        btnRunBatch.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+        btnRunBatch.ForeColor = Color.FromArgb(23, 120, 50);
+        btnRunBatch.Location = new Point(190, 58);
         btnRunBatch.Name = "btnRunBatch";
-        btnRunBatch.Size = new Size(110, 30);
+        btnRunBatch.Size = new Size(160, 42);
         btnRunBatch.TabIndex = 4;
-        btnRunBatch.Text = "Run Batch";
-        btnRunBatch.UseVisualStyleBackColor = true;
+        btnRunBatch.Text = "🚀 RUN BATCH";
+        btnRunBatch.UseVisualStyleBackColor = false;
         // 
         // txtBatchInfo
         // 
@@ -1024,6 +1033,7 @@ partial class Form1
         grpOptions.Controls.Add(chkAutoSplit);
         grpOptions.Controls.Add(chkSkipExisting);
         grpOptions.Controls.Add(chkAutoJoin);
+        grpOptions.Controls.Add(chkDeleteSegments);
         grpOptions.Controls.Add(lblSplitChars);
         grpOptions.Controls.Add(txtSplitChars);
         grpOptions.Controls.Add(btnAdvancedSettings);
@@ -1079,6 +1089,16 @@ partial class Form1
         chkAutoJoin.Text = "Auto Join";
         chkAutoJoin.UseVisualStyleBackColor = true;
         // 
+        // chkDeleteSegments
+        // 
+        chkDeleteSegments.AutoSize = true;
+        chkDeleteSegments.Location = new Point(205, 58);
+        chkDeleteSegments.Name = "chkDeleteSegments";
+        chkDeleteSegments.Size = new Size(98, 19);
+        chkDeleteSegments.TabIndex = 4;
+        chkDeleteSegments.Text = "Del Segments";
+        chkDeleteSegments.UseVisualStyleBackColor = true;
+        // 
         // lblSplitChars
         // 
         lblSplitChars.AutoSize = true;
@@ -1094,7 +1114,7 @@ partial class Form1
         txtSplitChars.Name = "txtSplitChars";
         txtSplitChars.Size = new Size(64, 23);
         txtSplitChars.TabIndex = 5;
-        txtSplitChars.Text = ".,!?";
+        txtSplitChars.Text = ".!?";
         // 
         // btnAdvancedSettings
         // 
@@ -1110,16 +1130,16 @@ partial class Form1
         // 
         pnlToolbar.AutoScroll = true;
         pnlToolbar.BackColor = Color.White;
-        pnlToolbar.Controls.Add(generateButton);
-        pnlToolbar.Controls.Add(stopButton);
         pnlToolbar.Controls.Add(btnImportFile);
         pnlToolbar.Controls.Add(btnImportFolder);
-        pnlToolbar.Controls.Add(btnImportVoice);
-        pnlToolbar.Controls.Add(btnOpenAudioOutput);
-        pnlToolbar.Controls.Add(btnCreateSrt);
+        pnlToolbar.Controls.Add(btnClearList);
         pnlToolbar.Controls.Add(btnJoinMp3);
+        pnlToolbar.Controls.Add(btnCreateSrt);
+        pnlToolbar.Controls.Add(btnOpenAudioOutput);
+        pnlToolbar.Controls.Add(generateButton);
         pnlToolbar.Controls.Add(playButton);
         pnlToolbar.Controls.Add(saveWavButton);
+        pnlToolbar.Controls.Add(stopButton);
         pnlToolbar.Dock = DockStyle.Fill;
         pnlToolbar.Location = new Point(3, 293);
         pnlToolbar.Name = "pnlToolbar";
@@ -1128,37 +1148,9 @@ partial class Form1
         pnlToolbar.TabIndex = 2;
         pnlToolbar.WrapContents = false;
         // 
-        // generateButton
-        // 
-        generateButton.BackColor = Color.FromArgb(232, 248, 235);
-        generateButton.FlatStyle = FlatStyle.Flat;
-        generateButton.ForeColor = Color.FromArgb(23, 120, 50);
-        generateButton.Location = new Point(5, 6);
-        generateButton.Margin = new Padding(0, 0, 7, 0);
-        generateButton.Name = "generateButton";
-        generateButton.Size = new Size(70, 29);
-        generateButton.TabIndex = 0;
-        generateButton.Text = "Start";
-        generateButton.UseVisualStyleBackColor = false;
-        generateButton.Click += GenerateButton_Click;
-        // 
-        // stopButton
-        // 
-        stopButton.BackColor = Color.FromArgb(255, 235, 235);
-        stopButton.FlatStyle = FlatStyle.Flat;
-        stopButton.ForeColor = Color.Firebrick;
-        stopButton.Location = new Point(82, 6);
-        stopButton.Margin = new Padding(0, 0, 7, 0);
-        stopButton.Name = "stopButton";
-        stopButton.Size = new Size(70, 29);
-        stopButton.TabIndex = 1;
-        stopButton.Text = "Stop";
-        stopButton.UseVisualStyleBackColor = false;
-        stopButton.Click += StopButton_Click;
-        // 
         // btnImportFile
         // 
-        btnImportFile.Location = new Point(159, 6);
+        btnImportFile.Location = new Point(5, 6);
         btnImportFile.Margin = new Padding(0, 0, 7, 0);
         btnImportFile.Name = "btnImportFile";
         btnImportFile.Size = new Size(90, 29);
@@ -1168,7 +1160,7 @@ partial class Form1
         // 
         // btnImportFolder
         // 
-        btnImportFolder.Location = new Point(256, 6);
+        btnImportFolder.Location = new Point(102, 6);
         btnImportFolder.Margin = new Padding(0, 0, 7, 0);
         btnImportFolder.Name = "btnImportFolder";
         btnImportFolder.Size = new Size(100, 29);
@@ -1176,39 +1168,20 @@ partial class Form1
         btnImportFolder.Text = "Import Folder";
         btnImportFolder.UseVisualStyleBackColor = true;
         // 
-        // btnImportVoice
+        // btnClearList
         // 
-        btnImportVoice.Location = new Point(363, 6);
-        btnImportVoice.Margin = new Padding(0, 0, 7, 0);
-        btnImportVoice.Name = "btnImportVoice";
-        btnImportVoice.Size = new Size(100, 29);
-        btnImportVoice.TabIndex = 4;
-        btnImportVoice.Text = "Import Voice";
-        btnImportVoice.UseVisualStyleBackColor = true;
-        // 
-        // btnOpenAudioOutput
-        // 
-        btnOpenAudioOutput.Location = new Point(470, 6);
-        btnOpenAudioOutput.Margin = new Padding(0, 0, 7, 0);
-        btnOpenAudioOutput.Name = "btnOpenAudioOutput";
-        btnOpenAudioOutput.Size = new Size(130, 29);
-        btnOpenAudioOutput.TabIndex = 5;
-        btnOpenAudioOutput.Text = "Open Audio Output";
-        btnOpenAudioOutput.UseVisualStyleBackColor = true;
-        // 
-        // btnCreateSrt
-        // 
-        btnCreateSrt.Location = new Point(607, 6);
-        btnCreateSrt.Margin = new Padding(0, 0, 7, 0);
-        btnCreateSrt.Name = "btnCreateSrt";
-        btnCreateSrt.Size = new Size(90, 29);
-        btnCreateSrt.TabIndex = 6;
-        btnCreateSrt.Text = "Create SRT";
-        btnCreateSrt.UseVisualStyleBackColor = true;
+        btnClearList.ForeColor = Color.DarkRed;
+        btnClearList.Location = new Point(209, 6);
+        btnClearList.Margin = new Padding(0, 0, 15, 0);
+        btnClearList.Name = "btnClearList";
+        btnClearList.Size = new Size(80, 29);
+        btnClearList.TabIndex = 4;
+        btnClearList.Text = "Clear List";
+        btnClearList.UseVisualStyleBackColor = true;
         // 
         // btnJoinMp3
         // 
-        btnJoinMp3.Location = new Point(704, 6);
+        btnJoinMp3.Location = new Point(304, 6);
         btnJoinMp3.Margin = new Padding(0, 0, 7, 0);
         btnJoinMp3.Name = "btnJoinMp3";
         btnJoinMp3.Size = new Size(85, 29);
@@ -1216,9 +1189,43 @@ partial class Form1
         btnJoinMp3.Text = "Join MP3";
         btnJoinMp3.UseVisualStyleBackColor = true;
         // 
+        // btnCreateSrt
+        // 
+        btnCreateSrt.Location = new Point(396, 6);
+        btnCreateSrt.Margin = new Padding(0, 0, 7, 0);
+        btnCreateSrt.Name = "btnCreateSrt";
+        btnCreateSrt.Size = new Size(90, 29);
+        btnCreateSrt.TabIndex = 6;
+        btnCreateSrt.Text = "Create SRT";
+        btnCreateSrt.UseVisualStyleBackColor = true;
+        // 
+        // btnOpenAudioOutput
+        // 
+        btnOpenAudioOutput.Location = new Point(493, 6);
+        btnOpenAudioOutput.Margin = new Padding(0, 0, 7, 0);
+        btnOpenAudioOutput.Name = "btnOpenAudioOutput";
+        btnOpenAudioOutput.Size = new Size(130, 29);
+        btnOpenAudioOutput.TabIndex = 5;
+        btnOpenAudioOutput.Text = "Open Audio Output";
+        btnOpenAudioOutput.UseVisualStyleBackColor = true;
+        // 
+        // generateButton
+        // 
+        generateButton.BackColor = Color.FromArgb(232, 248, 235);
+        generateButton.FlatStyle = FlatStyle.Flat;
+        generateButton.ForeColor = Color.FromArgb(23, 120, 50);
+        generateButton.Location = new Point(630, 6);
+        generateButton.Margin = new Padding(0, 0, 7, 0);
+        generateButton.Name = "generateButton";
+        generateButton.Size = new Size(95, 29);
+        generateButton.TabIndex = 0;
+        generateButton.Text = "Test Voice";
+        generateButton.UseVisualStyleBackColor = false;
+        generateButton.Click += GenerateButton_Click;
+        // 
         // playButton
         // 
-        playButton.Location = new Point(796, 6);
+        playButton.Location = new Point(732, 6);
         playButton.Margin = new Padding(0, 0, 7, 0);
         playButton.Name = "playButton";
         playButton.Size = new Size(70, 29);
@@ -1229,7 +1236,7 @@ partial class Form1
         // 
         // saveWavButton
         // 
-        saveWavButton.Location = new Point(873, 6);
+        saveWavButton.Location = new Point(809, 6);
         saveWavButton.Margin = new Padding(0, 0, 7, 0);
         saveWavButton.Name = "saveWavButton";
         saveWavButton.Size = new Size(90, 29);
@@ -1237,6 +1244,20 @@ partial class Form1
         saveWavButton.Text = "Save WAV";
         saveWavButton.UseVisualStyleBackColor = true;
         saveWavButton.Click += SaveWavButton_Click;
+        // 
+        // stopButton
+        // 
+        stopButton.BackColor = Color.FromArgb(255, 235, 235);
+        stopButton.FlatStyle = FlatStyle.Flat;
+        stopButton.ForeColor = Color.Firebrick;
+        stopButton.Location = new Point(906, 6);
+        stopButton.Margin = new Padding(0, 0, 7, 0);
+        stopButton.Name = "stopButton";
+        stopButton.Size = new Size(75, 29);
+        stopButton.TabIndex = 1;
+        stopButton.Text = "Stop All";
+        stopButton.UseVisualStyleBackColor = false;
+        stopButton.Click += StopButton_Click;
         // 
         // statusLayout
         // 
@@ -2787,6 +2808,16 @@ partial class Form1
         btnSaveSettings.TabIndex = 11;
         btnSaveSettings.Text = "Save Settings";
         btnSaveSettings.UseVisualStyleBackColor = false;
+        // 
+        // btnImportVoice
+        // 
+        btnImportVoice.Location = new Point(363, 6);
+        btnImportVoice.Margin = new Padding(0, 0, 7, 0);
+        btnImportVoice.Name = "btnImportVoice";
+        btnImportVoice.Size = new Size(100, 29);
+        btnImportVoice.TabIndex = 4;
+        btnImportVoice.Text = "Import Voice";
+        btnImportVoice.UseVisualStyleBackColor = true;
         // 
         // Form1
         // 
