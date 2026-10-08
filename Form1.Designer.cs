@@ -2892,6 +2892,6 @@ partial class Form1
         ((System.ComponentModel.ISupportInitialize)numSilence).EndInit();
         ResumeLayout(false);
     }
-    private Label lblTransitionSeconds;
-    private TableLayoutPanel pnlVideoBottom;
+    private Label lblTransitionSeconds = null!;
+    private TableLayoutPanel pnlVideoBottom = null!;
 }

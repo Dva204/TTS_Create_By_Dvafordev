@@ -70,6 +70,16 @@ public partial class Form1 : Form
         if (Controls.Find("btnLibraryAddVoice", true).FirstOrDefault() is Button btnLibAddVoice) btnLibAddVoice.Click += BtnLibraryAddVoice_Click;
         
         if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView dgvVoice) dgvVoice.SelectionChanged += DgvVoiceLibrary_SelectionChanged;
+
+        if (Controls.Find("dgvJobs", true).FirstOrDefault() is DataGridView dgvJobs)
+        {
+            dgvJobs.RowsAdded += (s, e) => UpdateToolbarState();
+            dgvJobs.RowsRemoved += (s, e) => UpdateToolbarState();
+        }
+        if (Controls.Find("txtBatchFolder", true).FirstOrDefault() is TextBox txtBatchFolder)
+        {
+            txtBatchFolder.TextChanged += (s, e) => UpdateToolbarState();
+        }
     }
 
 
@@ -159,7 +169,7 @@ public partial class Form1 : Form
         }
     }
 
-    private async void Form1_Load(object sender, EventArgs e)
+    private async void Form1_Load(object? sender, EventArgs e)
     {
         // Designer already populated engine and language lists.
         if (engineComboBox.Items.Count > 0)
@@ -280,6 +290,29 @@ public partial class Form1 : Form
     private void SetBusy(bool busy)
     {
         addVoiceButton.Enabled = generateButton.Enabled = !busy;
+        UpdateToolbarState();
+    }
+
+    private void UpdateToolbarState()
+    {
+        if (InvokeRequired) { BeginInvoke(() => UpdateToolbarState()); return; }
+
+        var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
+        bool hasJobs = dgv != null && dgv.Rows.Count > 0;
+        
+        var txtFolder = Controls.Find("txtBatchFolder", true).FirstOrDefault() as TextBox;
+        bool hasFolder = !string.IsNullOrWhiteSpace(txtFolder?.Text);
+
+        bool isBusy = activeJob != null || generation != null;
+
+        if (Controls.Find("btnImportFile", true).FirstOrDefault() is Button btnImpFile) btnImpFile.Enabled = !isBusy;
+        if (Controls.Find("btnImportFolder", true).FirstOrDefault() is Button btnImpFolder) btnImpFolder.Enabled = !isBusy;
+        if (Controls.Find("btnClearList", true).FirstOrDefault() is Button btnClr) btnClr.Enabled = hasJobs && !isBusy;
+        
+        if (Controls.Find("btnJoinMp3", true).FirstOrDefault() is Button btnJoin) btnJoin.Enabled = hasJobs && hasFolder && !isBusy;
+        if (Controls.Find("btnCreateSrt", true).FirstOrDefault() is Button btnSrt) btnSrt.Enabled = hasJobs && hasFolder && !isBusy;
+        if (Controls.Find("btnOpenAudioOutput", true).FirstOrDefault() is Button btnOpenOut) btnOpenOut.Enabled = hasFolder;
+        if (Controls.Find("btnRunBatch", true).FirstOrDefault() is Button btnRun) btnRun.Enabled = hasJobs && hasFolder && !isBusy;
     }
 
     private void WriteLog(string message)
@@ -306,7 +339,7 @@ public partial class Form1 : Form
         playButton.Enabled = saveWavButton.Enabled = false;
     }
 
-    private async void Form1_FormClosing(object sender, FormClosingEventArgs e)
+    private async void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
         lifetime.Cancel();
         generation?.Cancel();
@@ -322,7 +355,7 @@ public partial class Form1 : Form
     // ==========================================
     #region TAB: TTS / Batch
 
-    private async void AddVoiceButton_Click(object sender, EventArgs e)
+    private async void AddVoiceButton_Click(object? sender, EventArgs e)
     {
         using var dialog = new OpenFileDialog { Filter = "Audio (*.wav;*.mp3;*.m4a;*.flac)|*.wav;*.mp3;*.m4a;*.flac" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
@@ -351,18 +384,22 @@ public partial class Form1 : Form
         }
     }
 
-    private async void GenerateButton_Click(object sender, EventArgs e)
+    private async void GenerateButton_Click(object? sender, EventArgs e)
     {
         // Determine input text from available controls in Designer.
         string GetInputText()
         {
+            // Try to get text from the selected row in dgvJobs
+            var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
+            if (dgv != null && dgv.SelectedRows.Count > 0)
+            {
+                var content = dgv.SelectedRows[0].Cells[3].Value?.ToString();
+                if (!string.IsNullOrWhiteSpace(content)) return content.Trim();
+            }
+
             // Prefer preview sentence box if present and non-empty
             if (Controls.OfType<TextBox>().Any(t => t.Name == "txtPreviewSentence" && !string.IsNullOrWhiteSpace(t.Text)))
                 return Controls.Find("txtPreviewSentence", true).OfType<TextBox>().First().Text.Trim();
-
-            // Fallback to voice name (not ideal but ensures UI works)
-            if (!string.IsNullOrWhiteSpace(txtVoiceName.Text))
-                return txtVoiceName.Text.Trim();
 
             return string.Empty;
         }
@@ -370,8 +407,30 @@ public partial class Form1 : Form
         var input = GetInputText();
         if (string.IsNullOrWhiteSpace(input) || voiceComboBox.SelectedItem is not VoiceDto voice)
         {
-            MessageBox.Show(this, "Enter text (Preview sentence or Voice Name) and add or select a voice.");
+            MessageBox.Show(this, "Please select a row in the Subtitles list to test its voice, and ensure a Voice is selected.", "TTS Studio", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
+        }
+
+        string langCode = GetLangCode(languageComboBox.Text);
+        var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
+        if (dgv != null && dgv.SelectedRows.Count > 0)
+        {
+            var rowLang = dgv.SelectedRows[0].Cells[5].Value?.ToString();
+            if (!string.IsNullOrWhiteSpace(rowLang)) langCode = GetLangCode(rowLang);
+        }
+        
+        if (string.IsNullOrWhiteSpace(langCode)) langCode = "en"; // Fallback to avoid 422 if empty
+
+        TtsGenerationSettings? settings = null;
+        if (Controls.Find("chkChangeVoiceSettings", true).FirstOrDefault() is CheckBox chkChange && chkChange.Checked)
+        {
+            settings = new TtsGenerationSettings(
+                (double)((Controls.Find("numSpeed", true).FirstOrDefault() as NumericUpDown)?.Value ?? 1m),
+                (double)((Controls.Find("numSimilarity", true).FirstOrDefault() as NumericUpDown)?.Value ?? 60m),
+                (double)((Controls.Find("numStability", true).FirstOrDefault() as NumericUpDown)?.Value ?? 65m),
+                (double)((Controls.Find("numStyle", true).FirstOrDefault() as NumericUpDown)?.Value ?? 50m),
+                (Controls.Find("chkSpeakerBoost", true).FirstOrDefault() as CheckBox)?.Checked ?? true
+            );
         }
 
         generation?.Dispose();
@@ -382,7 +441,7 @@ public partial class Form1 : Form
             SetGenerating(true);
             CleanupAudio();
 
-            var request = new GenerateRequest(input, voice.Id, GetLangCode(languageComboBox.Text), engineComboBox.Text);
+            var request = new GenerateRequest(input, voice.Id, langCode, engineComboBox.Text, settings);
             var accepted = await api.GenerateAsync(request, generation.Token);
             activeJob = accepted.Id;
             WriteLog($"Job {activeJob} queued.");
@@ -420,7 +479,7 @@ public partial class Form1 : Form
         }
     }
 
-    private async void StopButton_Click(object sender, EventArgs e)
+    private async void StopButton_Click(object? sender, EventArgs e)
     {
         generation?.Cancel();
         if (activeJob is not null)
@@ -430,13 +489,13 @@ public partial class Form1 : Form
         }
     }
 
-    private void PlayButton_Click(object sender, EventArgs e)
+    private void PlayButton_Click(object? sender, EventArgs e)
     {
         if (audioFile is not null && File.Exists(audioFile))
             Process.Start(new ProcessStartInfo(audioFile) { UseShellExecute = true });
     }
 
-    private void SaveWavButton_Click(object sender, EventArgs e)
+    private void SaveWavButton_Click(object? sender, EventArgs e)
     {
         if (audioFile is null) return;
         using var dialog = new SaveFileDialog { Filter = "WAV audio|*.wav", FileName = $"tts-{DateTime.Now:yyyyMMdd-HHmmss}.wav" };
@@ -682,7 +741,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         if (txtFolder == null || string.IsNullOrWhiteSpace(txtFolder.Text)) return;
         
         var wavFiles = Directory.GetFiles(txtFolder.Text, "*.wav")
-            .Where(f => !Path.GetFileName(f).Equals("joined_output.wav", StringComparison.OrdinalIgnoreCase))
+            .Where(f => !Path.GetFileName(f).Equals("000_Full_Audio.wav", StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f).ToList();
         if (wavFiles.Count == 0) return;
 
@@ -690,7 +749,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         try
         {
             var listFile = Path.Combine(txtFolder.Text, "file_list.txt");
-            var outputWav = Path.Combine(txtFolder.Text, "joined_output.wav");
+            var outputWav = Path.Combine(txtFolder.Text, "000_Full_Audio.wav");
             var lines = wavFiles.Select(f => $"file '{Path.GetFileName(f)}'").ToArray();
             await File.WriteAllLinesAsync(listFile, lines, lifetime.Token);
 
@@ -1317,13 +1376,14 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
     {
         SetBusy(active);
         stopButton.Enabled = active;
+        UpdateToolbarState();
     }
     #endregion
 
-    private List<string> SmartSplit(string text, string splitChars, int minLength = 35)
+    private List<string> SmartSplit(string text, string splitChars, int maxChars = 250)
     {
         var result = new List<string>();
-        if (string.IsNullOrEmpty(splitChars))
+        if (string.IsNullOrEmpty(splitChars) || string.IsNullOrWhiteSpace(text))
         {
             if (!string.IsNullOrWhiteSpace(text)) result.Add(text.Trim());
             return result;
@@ -1331,6 +1391,8 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
 
         var segments = System.Text.RegularExpressions.Regex.Split(text, @"(?<=[" + System.Text.RegularExpressions.Regex.Escape(splitChars) + "])");
         var currentBuffer = new System.Text.StringBuilder();
+
+        int WordCount(string s) => s.Split(new[] { ' ', '\r', '\n', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
 
         foreach (var segment in segments)
         {
@@ -1340,7 +1402,9 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
             if (currentBuffer.Length > 0) currentBuffer.Append(" ");
             currentBuffer.Append(seg);
 
-            if (currentBuffer.Length >= minLength)
+            // If the buffered sentence has more than 3 words, it's long enough to stand alone.
+            // Or if it exceeds maxChars, we must flush it.
+            if (WordCount(currentBuffer.ToString()) > 3 || currentBuffer.Length >= maxChars)
             {
                 result.Add(currentBuffer.ToString());
                 currentBuffer.Clear();
@@ -1349,9 +1413,9 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
 
         if (currentBuffer.Length > 0)
         {
-            if (result.Count > 0 && currentBuffer.Length < minLength)
+            if (result.Count > 0 && WordCount(currentBuffer.ToString()) <= 3)
             {
-                // Append to the last sentence if it's too short to stand alone
+                // Merge with the last sentence if it's just 1-3 words
                 result[result.Count - 1] += " " + currentBuffer.ToString();
             }
             else

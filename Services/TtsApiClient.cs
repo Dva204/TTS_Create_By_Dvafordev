@@ -89,11 +89,17 @@ public sealed class TtsApiClient : IDisposable
         var body = await response.Content.ReadAsStringAsync(token);
         try
         {
-            var detail = JsonDocument.Parse(body).RootElement.GetProperty("detail").GetString();
-            throw new InvalidOperationException(detail ?? body);
+            var root = JsonDocument.Parse(body).RootElement;
+            if (root.TryGetProperty("detail", out var detailElement))
+            {
+                if (detailElement.ValueKind == JsonValueKind.Array)
+                    throw new InvalidOperationException(detailElement.ToString());
+                else
+                    throw new InvalidOperationException(detailElement.GetString() ?? body);
+            }
+            throw new InvalidOperationException(body);
         }
         catch (JsonException) { throw new HttpRequestException(body, null, response.StatusCode); }
-        catch (KeyNotFoundException) { throw new HttpRequestException(body, null, response.StatusCode); }
     }
 
     public void Dispose() => _http.Dispose();
