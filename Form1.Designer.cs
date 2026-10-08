@@ -1072,6 +1072,8 @@ partial class Form1
         // chkSkipExisting
         // 
         chkSkipExisting.AutoSize = true;
+        chkSkipExisting.Checked = true;
+        chkSkipExisting.CheckState = CheckState.Checked;
         chkSkipExisting.Location = new Point(15, 58);
         chkSkipExisting.Name = "chkSkipExisting";
         chkSkipExisting.Size = new Size(91, 19);
@@ -1082,6 +1084,8 @@ partial class Form1
         // chkAutoJoin
         // 
         chkAutoJoin.AutoSize = true;
+        chkAutoJoin.Checked = true;
+        chkAutoJoin.CheckState = CheckState.Checked;
         chkAutoJoin.Location = new Point(118, 58);
         chkAutoJoin.Name = "chkAutoJoin";
         chkAutoJoin.Size = new Size(76, 19);
@@ -1092,6 +1096,8 @@ partial class Form1
         // chkDeleteSegments
         // 
         chkDeleteSegments.AutoSize = true;
+        chkDeleteSegments.Checked = true;
+        chkDeleteSegments.CheckState = CheckState.Checked;
         chkDeleteSegments.Location = new Point(205, 58);
         chkDeleteSegments.Name = "chkDeleteSegments";
         chkDeleteSegments.Size = new Size(98, 19);

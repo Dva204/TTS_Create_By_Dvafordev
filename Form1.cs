@@ -448,7 +448,7 @@ public partial class Form1 : Form
 
             while (true)
             {
-                await Task.Delay(800, generation.Token);
+                await Task.Delay(1500, generation.Token);
                 var job = await api.GetJobAsync(activeJob, generation.Token) ?? throw new InvalidOperationException("Job not found.");
                 if (job.Status == "failed") throw new InvalidOperationException(job.Error ?? "Generation failed.");
                 if (job.Status == "cancelled") throw new OperationCanceledException();
@@ -475,6 +475,8 @@ public partial class Form1 : Form
         finally
         {
             activeJob = null;
+            generation?.Dispose();
+            generation = null;
             SetGenerating(false);
         }
     }
@@ -608,7 +610,18 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         generation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         var token = generation.Token;
 
-        SetBusy(true);
+        SetGenerating(true);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int totalJobs = 0, done = 0, processing = 0, failedCount = 0;
+        
+        System.Windows.Forms.Timer progressTimer = new System.Windows.Forms.Timer { Interval = 500 };
+        progressTimer.Tick += (s, ev) => {
+            lblSubtitleStatus.Text = $"Subtitles | Done: {done} | Processing: {processing} | Total: {totalJobs} | Failed: {failedCount} | Elapsed: {sw.Elapsed:mm\\:ss}";
+            int progressVal = done + failedCount;
+            if (progressVal <= progressTotal.Maximum) progressTotal.Value = progressVal;
+        };
+        progressTimer.Start();
+
         try
         {
             var settingsReq = new TtsGenerationSettings(
@@ -623,7 +636,22 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
             string engineTxt = engineComboBox.Text;
             bool retryFailed = (Controls.Find("chkRetryFailed", true).FirstOrDefault() as CheckBox)?.Checked == true;
             bool skipExisting = (Controls.Find("chkSkipExisting", true).FirstOrDefault() as CheckBox)?.Checked == true;
-            
+
+            // Pre-count total jobs
+            for (int i = 0; i < dgv.Rows.Count; i++)
+            {
+                var statusStr = dgv.Rows[i].Cells[6].Value?.ToString();
+                if (statusStr == "Completed") continue;
+                if (statusStr == "Failed" && !retryFailed) continue;
+                totalJobs++;
+            }
+
+            if (totalJobs > 0)
+            {
+                progressTotal.Maximum = totalJobs;
+                progressTotal.Value = 0;
+            }
+
             var semaphore = new SemaphoreSlim(3);
             var tasks = new List<Task>();
 
@@ -632,7 +660,6 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 var row = dgv.Rows[i];
                 var statusStr = row.Cells[6].Value?.ToString();
                 if (statusStr == "Completed") continue;
-                
                 if (statusStr == "Failed" && !retryFailed) continue;
                 
                 var filename = $"{row.Cells[0].Value}_{voiceComboBox.Text}.wav";
@@ -643,6 +670,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                     row.Cells[1].Value = filename;
                     row.Cells[6].Value = "Completed";
                     WriteLog($"Segment {row.Cells[0].Value} skipped (already exists).");
+                    Interlocked.Increment(ref done);
                     continue;
                 }
                 
@@ -650,6 +678,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 if (string.IsNullOrWhiteSpace(content))
                 {
                     row.Cells[6].Value = "Skipped";
+                    Interlocked.Increment(ref done);
                     continue;
                 }
 
@@ -666,8 +695,10 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                     try
                     {
                         token.ThrowIfCancellationRequested();
+                        Interlocked.Increment(ref processing);
                         Invoke(() => { 
                             row.Cells[6].Value = "Running";
+                            lblCurrentJob.Text = $"Current: {cell0}";
                             try { dgv.FirstDisplayedScrollingRowIndex = rowIndex; } catch { }
                         });
 
@@ -676,7 +707,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                         
                         while (true)
                         {
-                            await Task.Delay(800, token);
+                            await Task.Delay(1500, token);
                             var job = await api.GetJobAsync(jobId, token) ?? throw new InvalidOperationException("Job not found.");
                             if (job.Status == "failed") throw new InvalidOperationException(job.Error ?? "Generation failed.");
                             if (job.Status == "cancelled") throw new OperationCanceledException();
@@ -690,6 +721,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                                     row.Cells[6].Value = "Completed";
                                 });
                                 WriteLog($"Segment {cell0} completed.");
+                                Interlocked.Increment(ref done);
                                 break;
                             }
                         }
@@ -702,11 +734,13 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                     }
                     catch (Exception ex)
                     {
+                        Interlocked.Increment(ref failedCount);
                         Invoke(() => { row.Cells[6].Value = "Failed"; });
                         WriteLog($"Segment {cell0} failed: {ex.Message}");
                     }
                     finally
                     {
+                        Interlocked.Decrement(ref processing);
                         semaphore.Release();
                     }
                 }, token));
@@ -730,8 +764,14 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         }
         finally
         {
-            SetBusy(false);
+            sw.Stop();
+            progressTimer.Stop();
+            progressTimer.Dispose();
+            lblSubtitleStatus.Text = $"Subtitles | Done: {done} | Processing: 0 | Total: {totalJobs} | Failed: {failedCount} | Elapsed: {sw.Elapsed:mm\\:ss}";
             activeJob = null;
+            generation?.Dispose();
+            generation = null;
+            SetGenerating(false);
         }
     }
 
