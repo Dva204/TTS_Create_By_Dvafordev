@@ -1,0 +1,5 @@
+Hello there! Welcome to the AI Text to Speech studio.
+This is a test script to evaluate the capabilities of the voice engine.
+Did the auto-split function correctly separate these sentences?
+I really hope it did! Now, let's see how well the AI reads this entire paragraph.
+It should sound perfectly natural and engaging.

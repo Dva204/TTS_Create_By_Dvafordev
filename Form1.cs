@@ -192,6 +192,15 @@ public partial class Form1 : Form
             cmbNewLang.Items.Clear();
             cmbNewLang.Items.AddRange(newVoiceLangs);
         }
+        
+        if (Controls.Find("cmbLibraryLanguage", true).FirstOrDefault() is ComboBox cmbLibLang)
+        {
+            var libLangs = new List<string> { "All Languages" };
+            libLangs.AddRange(friendlyLangs.Where(x => x != "Auto"));
+            cmbLibLang.Items.Clear();
+            cmbLibLang.Items.AddRange(libLangs.ToArray());
+            cmbLibLang.SelectedIndex = 0;
+        }
 
         stopButton.Enabled = false;
 
@@ -271,17 +280,24 @@ public partial class Form1 : Form
         // Fetch from API only if it's a full refresh (q == null) or if we don't have voices yet
         if (q == null || allVoices.Count == 0)
         {
-            var voices = await api.GetVoicesAsync(null, token);
-            if (voices != null)
+            try 
             {
-                allVoices = voices.ToList();
-                var currentVoiceId = voiceComboBox.SelectedValue?.ToString();
-                
-                voiceComboBox.DataSource = allVoices.ToList();
-                voiceComboBox.DisplayMember = nameof(VoiceDto.Name);
-                voiceComboBox.ValueMember = nameof(VoiceDto.Id);
-                
-                if (currentVoiceId != null) voiceComboBox.SelectedValue = currentVoiceId;
+                var voices = await api.GetVoicesAsync(null, token);
+                if (voices != null)
+                {
+                    allVoices = voices.ToList();
+                    var currentVoiceId = voiceComboBox.SelectedValue?.ToString();
+                    
+                    voiceComboBox.DataSource = allVoices.ToList();
+                    voiceComboBox.DisplayMember = nameof(VoiceDto.Name);
+                    voiceComboBox.ValueMember = nameof(VoiceDto.Id);
+                    
+                    if (currentVoiceId != null) voiceComboBox.SelectedValue = currentVoiceId;
+                }
+            }
+            catch (Exception)
+            {
+                // Ignore backend offline exception to prevent crash
             }
         }
 
@@ -303,8 +319,8 @@ public partial class Form1 : Form
             var cmbLibLang = Controls.Find("cmbLibraryLanguage", true).FirstOrDefault() as ComboBox;
             if (cmbLibLang != null && cmbLibLang.SelectedIndex > 0)
             {
-                var langText = cmbLibLang.Text.ToLower();
-                filtered = filtered.Where(v => v.Language?.ToLower().Contains(langText) ?? false);
+                var targetCode = GetLangCode(cmbLibLang.Text).ToLower();
+                filtered = filtered.Where(v => v.Language?.ToLower() == targetCode);
             }
 
             foreach (var v in filtered)
