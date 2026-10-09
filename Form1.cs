@@ -68,6 +68,12 @@ public partial class Form1 : Form
         if (Controls.Find("btnSaveNewVoice", true).FirstOrDefault() is Button btnSaveNew) btnSaveNew.Click += BtnSaveNewVoice_Click;
         if (Controls.Find("btnClearNewVoice", true).FirstOrDefault() is Button btnClearNew) btnClearNew.Click += BtnClearNewVoice_Click;
         if (Controls.Find("btnLibraryAddVoice", true).FirstOrDefault() is Button btnLibAddVoice) btnLibAddVoice.Click += BtnLibraryAddVoice_Click;
+        if (Controls.Find("btnOpenVoiceLibrary", true).FirstOrDefault() is Button btnOpenLib) btnOpenLib.Click += (s, e) => mainTabControl.SelectedTab = tabVoiceLibrary;
+        if (Controls.Find("btnSearchVoice", true).FirstOrDefault() is Button btnSearchVoice) btnSearchVoice.Click += BtnSearchVoice_Click;
+        if (Controls.Find("cmbLibraryLanguage", true).FirstOrDefault() is ComboBox cmbLibLang) cmbLibLang.SelectedIndexChanged += async (s, e) => {
+            var txtSearch = Controls.Find("txtLibrarySearch", true).FirstOrDefault() as TextBox;
+            await RefreshVoices(txtSearch?.Text, lifetime.Token);
+        };
         
         if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView dgvVoice) dgvVoice.SelectionChanged += DgvVoiceLibrary_SelectionChanged;
 
@@ -187,7 +193,7 @@ public partial class Form1 : Form
             cmbNewLang.Items.AddRange(newVoiceLangs);
         }
 
-        stopButton.Enabled = playButton.Enabled = saveWavButton.Enabled = false;
+        stopButton.Enabled = false;
 
         LoadSettings();
         
@@ -258,19 +264,50 @@ public partial class Form1 : Form
         gpuStatusLabel.Text = gpuText;
     }
 
+    private List<VoiceDto> allVoices = new();
+
     private async Task RefreshVoices(string? q = null, CancellationToken token = default)
     {
-        var voices = await api.GetVoicesAsync(q, token);
-        if (voices is null) return;
-        var voiceList = voices.ToList();
-        voiceComboBox.DataSource = voiceList;
-        voiceComboBox.DisplayMember = nameof(VoiceDto.Name);
-        voiceComboBox.ValueMember = nameof(VoiceDto.Id);
-        
+        // Fetch from API only if it's a full refresh (q == null) or if we don't have voices yet
+        if (q == null || allVoices.Count == 0)
+        {
+            var voices = await api.GetVoicesAsync(null, token);
+            if (voices != null)
+            {
+                allVoices = voices.ToList();
+                var currentVoiceId = voiceComboBox.SelectedValue?.ToString();
+                
+                voiceComboBox.DataSource = allVoices.ToList();
+                voiceComboBox.DisplayMember = nameof(VoiceDto.Name);
+                voiceComboBox.ValueMember = nameof(VoiceDto.Id);
+                
+                if (currentVoiceId != null) voiceComboBox.SelectedValue = currentVoiceId;
+            }
+        }
+
         if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView dgv)
         {
             dgv.Rows.Clear();
-            foreach (var v in voiceList)
+            var filtered = allVoices.AsEnumerable();
+            
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var lowerQ = q.ToLower();
+                filtered = filtered.Where(v => 
+                    (v.Name?.ToLower().Contains(lowerQ) ?? false) ||
+                    (v.Id?.ToLower().Contains(lowerQ) ?? false) ||
+                    (v.Description?.ToLower().Contains(lowerQ) ?? false)
+                );
+            }
+            
+            var cmbLibLang = Controls.Find("cmbLibraryLanguage", true).FirstOrDefault() as ComboBox;
+            if (cmbLibLang != null && cmbLibLang.SelectedIndex > 0)
+            {
+                var langText = cmbLibLang.Text.ToLower();
+                filtered = filtered.Where(v => v.Language?.ToLower().Contains(langText) ?? false);
+            }
+
+            foreach (var v in filtered)
             {
                 int idx = dgv.Rows.Add(v.Name, v.Id, v.Language, v.Gender, v.CreatedAt);
                 dgv.Rows[idx].Tag = v;
@@ -289,7 +326,7 @@ public partial class Form1 : Form
 
     private void SetBusy(bool busy)
     {
-        addVoiceButton.Enabled = generateButton.Enabled = !busy;
+
         UpdateToolbarState();
     }
 
@@ -336,7 +373,6 @@ public partial class Form1 : Form
             try { File.Delete(audioFile); } catch { }
 
         audioFile = null;
-        playButton.Enabled = saveWavButton.Enabled = false;
     }
 
     private async void Form1_FormClosing(object? sender, FormClosingEventArgs e)
@@ -458,7 +494,7 @@ public partial class Form1 : Form
                     var audioBytes = await api.DownloadAudioAsync(activeJob, generation.Token);
                     await File.WriteAllBytesAsync(audioFile, audioBytes, generation.Token);
                     try { await api.CancelJobAsync(activeJob, generation.Token); } catch { }
-                    playButton.Enabled = saveWavButton.Enabled = true;
+
                     WriteLog("WAV generated successfully.");
                     break;
                 }
@@ -654,6 +690,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
             var semaphore = new SemaphoreSlim(3);
             var tasks = new List<Task>();
+            string ext = userSettings.OutputFormat.ToLower() == "mp3" ? "mp3" : "wav";
+            string bitrate = userSettings.Mp3Bitrate;
 
             for (int i = 0; i < dgv.Rows.Count; i++)
             {
@@ -662,7 +700,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 if (statusStr == "Completed") continue;
                 if (statusStr == "Failed" && !retryFailed) continue;
                 
-                var filename = $"{row.Cells[0].Value}_{voiceComboBox.Text}.wav";
+                var filename = $"{row.Cells[0].Value}_{voiceComboBox.Text}.{ext}";
                 var path = Path.Combine(txtFolder.Text, filename);
 
                 if (skipExisting && File.Exists(path))
@@ -715,7 +753,19 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                             if (job.Status == "completed")
                             {
                                 var audioBytes = await new HttpClient().GetByteArrayAsync(new Uri(settings.BackendUri, $"api/jobs/{jobId}/audio"), token);
-                                await File.WriteAllBytesAsync(path, audioBytes, token);
+                                if (ext == "mp3")
+                                {
+                                    var tempWav = path + ".tmp.wav";
+                                    await File.WriteAllBytesAsync(tempWav, audioBytes, token);
+                                    var psi = new ProcessStartInfo("ffmpeg") { Arguments = $"-y -i \"{tempWav}\" -b:a {bitrate} \"{path}\"", UseShellExecute = false, CreateNoWindow = true };
+                                    var proc = Process.Start(psi);
+                                    if (proc != null) await proc.WaitForExitAsync(token);
+                                    try { File.Delete(tempWav); } catch { }
+                                }
+                                else
+                                {
+                                    await File.WriteAllBytesAsync(path, audioBytes, token);
+                                }
                                 try { await api.CancelJobAsync(jobId, token); } catch { }
                                 Invoke(() => {
                                     row.Cells[1].Value = filename;
@@ -750,10 +800,10 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
             await Task.WhenAll(tasks);
             WriteLog("Batch completed!");
             var chkSrt = Controls.Find("chkAutoSrt", true).FirstOrDefault() as CheckBox;
-            if (chkSrt?.Checked == true) GenerateSrt();
+            if (chkSrt?.Checked == true) await GenerateSrtTask();
 
             var chkJoin = Controls.Find("chkAutoJoin", true).FirstOrDefault() as CheckBox;
-            if (chkJoin?.Checked == true) BtnJoinMp3_Click(null, EventArgs.Empty);
+            if (chkJoin?.Checked == true) await JoinMp3Task();
         }
         catch (OperationCanceledException)
         {
@@ -778,6 +828,11 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
     private async void BtnJoinMp3_Click(object? sender, EventArgs e)
     {
+        await JoinMp3Task();
+    }
+
+    private async Task JoinMp3Task()
+    {
         var txtFolder = Controls.Find("txtBatchFolder", true).FirstOrDefault() as TextBox;
         var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
         if (txtFolder == null || string.IsNullOrWhiteSpace(txtFolder.Text) || dgv == null) return;
@@ -786,6 +841,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         try
         {
             var groups = new Dictionary<string, List<string>>();
+            string ext = userSettings.OutputFormat.ToLower() == "mp3" ? "mp3" : "wav";
 
             for (int i = 0; i < dgv.Rows.Count; i++)
             {
@@ -809,17 +865,17 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
             foreach (var group in groups)
             {
                 var sourceName = group.Key;
-                var wavFiles = group.Value;
-                if (wavFiles.Count == 0) continue;
+                var files = group.Value;
+                if (files.Count == 0) continue;
 
                 var listFile = Path.Combine(txtFolder.Text, $"file_list_{sourceName}.txt");
-                var outputWav = Path.Combine(txtFolder.Text, $"{sourceName}.wav");
-                var lines = wavFiles.Select(f => $"file '{Path.GetFileName(f)}'").ToArray();
+                var outputAudio = Path.Combine(txtFolder.Text, $"{sourceName}.{ext}");
+                var lines = files.Select(f => $"file '{Path.GetFileName(f)}'").ToArray();
                 await File.WriteAllLinesAsync(listFile, lines, lifetime.Token);
 
                 var psi = new ProcessStartInfo("ffmpeg")
                 {
-                    Arguments = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outputWav}\"",
+                    Arguments = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outputAudio}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardError = true
@@ -831,7 +887,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                     await process.WaitForExitAsync(lifetime.Token);
                     if (process.ExitCode == 0)
                     {
-                        WriteLog($"Successfully joined {wavFiles.Count} files into {sourceName}.wav");
+                        WriteLog($"Successfully joined {files.Count} files into {sourceName}.{ext}");
                         try { File.Delete(listFile); } catch { }
                     }
                     else WriteLog($"FFmpeg join failed for {sourceName}: " + await process.StandardError.ReadToEndAsync());
@@ -925,58 +981,89 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         }
     }
 
-    private void BtnCreateSrt_Click(object? sender, EventArgs e)
+    private async void BtnCreateSrt_Click(object? sender, EventArgs e)
     {
-        GenerateSrt();
+        await GenerateSrtTask();
     }
     
-    private void GenerateSrt()
+    private async Task GenerateSrtTask()
     {
         var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
         var txtFolder = Controls.Find("txtBatchFolder", true).FirstOrDefault() as TextBox;
         if (dgv == null || txtFolder == null || string.IsNullOrWhiteSpace(txtFolder.Text)) return;
         
-        string srtPath = Path.Combine(txtFolder.Text, "subtitles.srt");
-        var sb = new System.Text.StringBuilder();
-        TimeSpan current = TimeSpan.Zero;
-        int index = 1;
-
+        var groups = new Dictionary<string, List<DataGridViewRow>>();
         for (int i = 0; i < dgv.Rows.Count; i++)
         {
             var row = dgv.Rows[i];
             if (row.Cells[6].Value?.ToString() != "Completed") continue;
             
-            var filename = row.Cells[1].Value?.ToString();
-            if (string.IsNullOrEmpty(filename)) continue;
+            var sourceFile = row.Cells[7].Value?.ToString();
+            if (string.IsNullOrWhiteSpace(sourceFile)) sourceFile = "000_Full_Audio";
+            else sourceFile = "000_" + sourceFile;
             
-            var wavPath = Path.Combine(txtFolder.Text, filename);
-            if (!File.Exists(wavPath)) continue;
-            
-            double durationSecs = 0;
-            try {
-                var fi = new FileInfo(wavPath);
-                // Approx duration for 24kHz 16-bit mono WAV = 48000 bytes/sec
-                durationSecs = (fi.Length - 44) / 48000.0;
-                if (durationSecs < 0) durationSecs = 0;
-            } catch { }
-
-            var start = current;
-            var end = current.Add(TimeSpan.FromSeconds(durationSecs));
-            
-            sb.AppendLine(index.ToString());
-            sb.AppendLine($"{start:hh\\:mm\\:ss\\,fff} --> {end:hh\\:mm\\:ss\\,fff}");
-            sb.AppendLine(row.Cells[3].Value?.ToString());
-            sb.AppendLine();
-            
-            current = end;
-            index++;
+            if (!groups.ContainsKey(sourceFile)) groups[sourceFile] = new List<DataGridViewRow>();
+            groups[sourceFile].Add(row);
         }
-        
-        try {
-            File.WriteAllText(srtPath, sb.ToString());
-            WriteLog($"SRT created at {srtPath}");
-        } catch (Exception ex) {
-            WriteLog("Failed to create SRT: " + ex.Message);
+
+        foreach (var group in groups)
+        {
+            var sourceName = group.Key;
+            string srtPath = Path.Combine(txtFolder.Text, $"{sourceName}_subtitles.srt");
+            var sb = new System.Text.StringBuilder();
+            TimeSpan current = TimeSpan.Zero;
+            int index = 1;
+
+            foreach (var row in group.Value)
+            {
+                var filename = row.Cells[1].Value?.ToString();
+                if (string.IsNullOrEmpty(filename)) continue;
+                
+                var path = Path.Combine(txtFolder.Text, filename);
+                if (!File.Exists(path)) continue;
+                
+                double durationSecs = 0;
+                try {
+                    var psi = new ProcessStartInfo("ffprobe") {
+                        Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{path}\"",
+                        RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
+                    };
+                    var proc = Process.Start(psi);
+                    if (proc != null) {
+                        var outStr = await proc.StandardOutput.ReadToEndAsync();
+                        await proc.WaitForExitAsync(lifetime.Token);
+                        if (double.TryParse(outStr.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double d)) {
+                            durationSecs = d;
+                        }
+                    }
+                } catch { }
+
+                if (durationSecs <= 0) {
+                    try {
+                        var fi = new FileInfo(path);
+                        durationSecs = (fi.Length - 44) / 48000.0;
+                        if (durationSecs < 0) durationSecs = 0;
+                    } catch { }
+                }
+
+                var start = current;
+                var end = current.Add(TimeSpan.FromSeconds(durationSecs));
+                
+                sb.AppendLine(index.ToString());
+                sb.AppendLine($"{start:hh\\:mm\\:ss\\,fff} --> {end:hh\\:mm\\:ss\\,fff}");
+                sb.AppendLine(row.Cells[3].Value?.ToString());
+                sb.AppendLine();
+                
+                current = end;
+                index++;
+            }
+            
+            try {
+                await File.WriteAllTextAsync(srtPath, sb.ToString(), lifetime.Token);
+                WriteLog($"SRT created at {srtPath}");
+            } catch (Exception ex) {
+                WriteLog($"Failed to create SRT for {sourceName}: " + ex.Message);
+            }
         }
     }
     #endregion
@@ -1330,6 +1417,49 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
             } catch (Exception ex) {
                 WriteLog("Error playing reference: " + ex.Message);
             }
+        }
+    }
+
+    private void BtnSearchVoice_Click(object? sender, EventArgs e)
+    {
+        var txtId = Controls.Find("txtVoiceName", true).FirstOrDefault() as TextBox;
+        var cmbVoice = Controls.Find("voiceComboBox", true).FirstOrDefault() as ComboBox;
+        var cmbLang = Controls.Find("languageComboBox", true).FirstOrDefault() as ComboBox;
+
+        if (txtId == null || cmbVoice == null || cmbLang == null) return;
+
+        string searchId = txtId.Text.Trim();
+        if (string.IsNullOrWhiteSpace(searchId)) return;
+
+        bool found = false;
+        for (int i = 0; i < cmbVoice.Items.Count; i++)
+        {
+            if (cmbVoice.Items[i] is Models.VoiceDto vm && string.Equals(vm.Id, searchId, StringComparison.OrdinalIgnoreCase))
+            {
+                cmbVoice.SelectedIndex = i;
+                found = true;
+                
+                // Map language Code to friendly language name
+                if (!string.IsNullOrEmpty(vm.Language))
+                {
+                    var langStr = vm.Language.ToLower();
+                    for (int j = 0; j < cmbLang.Items.Count; j++)
+                    {
+                        var itemStr = cmbLang.Items[j].ToString()?.ToLower();
+                        if (itemStr != null && itemStr.Contains(langStr))
+                        {
+                            cmbLang.SelectedIndex = j;
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            MessageBox.Show(this, "Voice ID not found in library.", "Not Found", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 

@@ -23,7 +23,7 @@ partial class Form1
     private TableLayoutPanel statusLayout = null!;
 
     private GroupBox grpVoice = null!;
-    private Label lblVoiceName = null!;
+    private Label lblVoiceId = null!;
     private TextBox txtVoiceName = null!;
     private Button btnSearchVoice = null!;
     private Label lblVoice = null!;
@@ -32,8 +32,6 @@ partial class Form1
     private ComboBox engineComboBox = null!;
     private Label lblLanguage = null!;
     private ComboBox languageComboBox = null!;
-    private Button btnAddLibrary = null!;
-    private Button addVoiceButton = null!;
     private Button btnOpenVoiceLibrary = null!;
 
     private GroupBox grpVoiceSettings = null!;
@@ -76,7 +74,6 @@ partial class Form1
     private Button btnAdvancedSettings = null!;
 
     private FlowLayoutPanel pnlToolbar = null!;
-    private Button generateButton = null!;
     private Button stopButton = null!;
     private Button btnImportFile = null!;
     private Button btnImportFolder = null!;
@@ -85,8 +82,6 @@ partial class Form1
     private Button btnOpenAudioOutput = null!;
     private Button btnCreateSrt = null!;
     private Button btnJoinMp3 = null!;
-    private Button playButton = null!;
-    private Button saveWavButton = null!;
 
     private Label lblSubtitleStatus = null!;
     private Label lblCurrentJob = null!;
@@ -132,6 +127,7 @@ partial class Form1
     private Label lblSelectedVoiceIdText = null!;
     private TextBox txtSelectedVoiceId = null!;
     private Label lblSelectedVoiceLanguageText = null!;
+    private ComboBox cmbLibraryLanguage = null!;
     private Label lblSelectedVoiceLanguage = null!;
     private Label lblSelectedVoiceGenderText = null!;
     private Label lblSelectedVoiceGender = null!;
@@ -285,7 +281,7 @@ partial class Form1
         ttsRootLayout = new TableLayoutPanel();
         ttsTopLayout = new TableLayoutPanel();
         grpVoice = new GroupBox();
-        lblVoiceName = new Label();
+        lblVoiceId = new Label();
         txtVoiceName = new TextBox();
         btnSearchVoice = new Button();
         lblVoice = new Label();
@@ -294,8 +290,6 @@ partial class Form1
         engineComboBox = new ComboBox();
         lblLanguage = new Label();
         languageComboBox = new ComboBox();
-        btnAddLibrary = new Button();
-        addVoiceButton = new Button();
         btnOpenVoiceLibrary = new Button();
         grpVoiceSettings = new GroupBox();
         chkVoiceSettings = new CheckBox();
@@ -340,9 +334,6 @@ partial class Form1
         btnJoinMp3 = new Button();
         btnCreateSrt = new Button();
         btnOpenAudioOutput = new Button();
-        generateButton = new Button();
-        playButton = new Button();
-        saveWavButton = new Button();
         stopButton = new Button();
         statusLayout = new TableLayoutPanel();
         lblSubtitleStatus = new Label();
@@ -361,6 +352,7 @@ partial class Form1
         tabVoiceLibrary = new TabPage();
         libraryRootLayout = new TableLayoutPanel();
         libraryHeaderLayout = new TableLayoutPanel();
+        cmbLibraryLanguage = new ComboBox();
         lblLibraryTitle = new Label();
         txtLibrarySearch = new TextBox();
         btnLibrarySearch = new Button();
@@ -597,7 +589,7 @@ partial class Form1
         // grpVoice
         // 
         grpVoice.BackColor = Color.White;
-        grpVoice.Controls.Add(lblVoiceName);
+        grpVoice.Controls.Add(lblVoiceId);
         grpVoice.Controls.Add(txtVoiceName);
         grpVoice.Controls.Add(btnSearchVoice);
         grpVoice.Controls.Add(lblVoice);
@@ -606,8 +598,6 @@ partial class Form1
         grpVoice.Controls.Add(engineComboBox);
         grpVoice.Controls.Add(lblLanguage);
         grpVoice.Controls.Add(languageComboBox);
-        grpVoice.Controls.Add(btnAddLibrary);
-        grpVoice.Controls.Add(addVoiceButton);
         grpVoice.Controls.Add(btnOpenVoiceLibrary);
         grpVoice.Dock = DockStyle.Fill;
         grpVoice.Location = new Point(0, 0);
@@ -618,14 +608,14 @@ partial class Form1
         grpVoice.TabStop = false;
         grpVoice.Text = "Voice";
         // 
-        // lblVoiceName
+        // lblVoiceId
         // 
-        lblVoiceName.AutoSize = true;
-        lblVoiceName.Location = new Point(14, 30);
-        lblVoiceName.Name = "lblVoiceName";
-        lblVoiceName.Size = new Size(42, 15);
-        lblVoiceName.TabIndex = 0;
-        lblVoiceName.Text = "Name:";
+        lblVoiceId.AutoSize = true;
+        lblVoiceId.Location = new Point(14, 30);
+        lblVoiceId.Name = "lblVoiceId";
+        lblVoiceId.Size = new Size(27, 15);
+        lblVoiceId.TabIndex = 0;
+        lblVoiceId.Text = "ID : ";
         // 
         // txtVoiceName
         // 
@@ -699,33 +689,9 @@ partial class Form1
         languageComboBox.Size = new Size(155, 23);
         languageComboBox.TabIndex = 8;
         // 
-        // btnAddLibrary
-        // 
-        btnAddLibrary.BackColor = Color.White;
-        btnAddLibrary.FlatStyle = FlatStyle.Flat;
-        btnAddLibrary.Location = new Point(14, 92);
-        btnAddLibrary.Name = "btnAddLibrary";
-        btnAddLibrary.Size = new Size(105, 30);
-        btnAddLibrary.TabIndex = 9;
-        btnAddLibrary.Text = "+ Add to Library";
-        btnAddLibrary.UseVisualStyleBackColor = false;
-        // 
-        // addVoiceButton
-        // 
-        addVoiceButton.BackColor = Color.FromArgb(246, 235, 255);
-        addVoiceButton.FlatStyle = FlatStyle.Flat;
-        addVoiceButton.ForeColor = Color.FromArgb(128, 54, 172);
-        addVoiceButton.Location = new Point(125, 92);
-        addVoiceButton.Name = "addVoiceButton";
-        addVoiceButton.Size = new Size(105, 30);
-        addVoiceButton.TabIndex = 10;
-        addVoiceButton.Text = "Import Voice";
-        addVoiceButton.UseVisualStyleBackColor = false;
-        addVoiceButton.Click += AddVoiceButton_Click;
-        // 
         // btnOpenVoiceLibrary
         // 
-        btnOpenVoiceLibrary.Location = new Point(236, 92);
+        btnOpenVoiceLibrary.Location = new Point(122, 85);
         btnOpenVoiceLibrary.Name = "btnOpenVoiceLibrary";
         btnOpenVoiceLibrary.Size = new Size(95, 30);
         btnOpenVoiceLibrary.TabIndex = 11;
@@ -1144,9 +1110,6 @@ partial class Form1
         pnlToolbar.Controls.Add(btnJoinMp3);
         pnlToolbar.Controls.Add(btnCreateSrt);
         pnlToolbar.Controls.Add(btnOpenAudioOutput);
-        pnlToolbar.Controls.Add(generateButton);
-        pnlToolbar.Controls.Add(playButton);
-        pnlToolbar.Controls.Add(saveWavButton);
         pnlToolbar.Controls.Add(stopButton);
         pnlToolbar.Dock = DockStyle.Fill;
         pnlToolbar.Location = new Point(3, 293);
@@ -1217,48 +1180,12 @@ partial class Form1
         btnOpenAudioOutput.Text = "Open Audio Output";
         btnOpenAudioOutput.UseVisualStyleBackColor = true;
         // 
-        // generateButton
-        // 
-        generateButton.BackColor = Color.FromArgb(232, 248, 235);
-        generateButton.FlatStyle = FlatStyle.Flat;
-        generateButton.ForeColor = Color.FromArgb(23, 120, 50);
-        generateButton.Location = new Point(630, 6);
-        generateButton.Margin = new Padding(0, 0, 7, 0);
-        generateButton.Name = "generateButton";
-        generateButton.Size = new Size(95, 29);
-        generateButton.TabIndex = 0;
-        generateButton.Text = "Test Voice";
-        generateButton.UseVisualStyleBackColor = false;
-        generateButton.Click += GenerateButton_Click;
-        // 
-        // playButton
-        // 
-        playButton.Location = new Point(732, 6);
-        playButton.Margin = new Padding(0, 0, 7, 0);
-        playButton.Name = "playButton";
-        playButton.Size = new Size(70, 29);
-        playButton.TabIndex = 8;
-        playButton.Text = "Play";
-        playButton.UseVisualStyleBackColor = true;
-        playButton.Click += PlayButton_Click;
-        // 
-        // saveWavButton
-        // 
-        saveWavButton.Location = new Point(809, 6);
-        saveWavButton.Margin = new Padding(0, 0, 7, 0);
-        saveWavButton.Name = "saveWavButton";
-        saveWavButton.Size = new Size(90, 29);
-        saveWavButton.TabIndex = 9;
-        saveWavButton.Text = "Save WAV";
-        saveWavButton.UseVisualStyleBackColor = true;
-        saveWavButton.Click += SaveWavButton_Click;
-        // 
         // stopButton
         // 
         stopButton.BackColor = Color.FromArgb(255, 235, 235);
         stopButton.FlatStyle = FlatStyle.Flat;
         stopButton.ForeColor = Color.Firebrick;
-        stopButton.Location = new Point(906, 6);
+        stopButton.Location = new Point(630, 6);
         stopButton.Margin = new Padding(0, 0, 7, 0);
         stopButton.Name = "stopButton";
         stopButton.Size = new Size(75, 29);
@@ -1399,11 +1326,9 @@ partial class Form1
         // 
         // colSourceFile
         // 
-        colSourceFile.FillWeight = 100F;
         colSourceFile.HeaderText = "Source File";
         colSourceFile.Name = "colSourceFile";
         colSourceFile.ReadOnly = true;
-        colSourceFile.Visible = true;
         // 
         // logsTextBox
         // 
@@ -1448,18 +1373,20 @@ partial class Form1
         // libraryHeaderLayout
         // 
         libraryHeaderLayout.BackColor = Color.White;
-        libraryHeaderLayout.ColumnCount = 6;
+        libraryHeaderLayout.ColumnCount = 7;
         libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 165F));
         libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
         libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82F));
         libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82F));
         libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 20F));
         libraryHeaderLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
         libraryHeaderLayout.Controls.Add(lblLibraryTitle, 0, 0);
         libraryHeaderLayout.Controls.Add(txtLibrarySearch, 1, 0);
-        libraryHeaderLayout.Controls.Add(btnLibrarySearch, 2, 0);
-        libraryHeaderLayout.Controls.Add(btnLibraryRefresh, 3, 0);
-        libraryHeaderLayout.Controls.Add(btnLibraryAddVoice, 5, 0);
+        libraryHeaderLayout.Controls.Add(cmbLibraryLanguage, 2, 0);
+        libraryHeaderLayout.Controls.Add(btnLibrarySearch, 3, 0);
+        libraryHeaderLayout.Controls.Add(btnLibraryRefresh, 4, 0);
+        libraryHeaderLayout.Controls.Add(btnLibraryAddVoice, 6, 0);
         libraryHeaderLayout.Dock = DockStyle.Fill;
         libraryHeaderLayout.Location = new Point(3, 3);
         libraryHeaderLayout.Name = "libraryHeaderLayout";
@@ -1484,9 +1411,20 @@ partial class Form1
         txtLibrarySearch.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         txtLibrarySearch.Location = new Point(168, 16);
         txtLibrarySearch.Name = "txtLibrarySearch";
-        txtLibrarySearch.PlaceholderText = "Search voice...";
+        txtLibrarySearch.PlaceholderText = "Search voice id...";
         txtLibrarySearch.Size = new Size(745, 23);
         txtLibrarySearch.TabIndex = 1;
+        //
+        // cmbLibraryLanguage
+        //
+        cmbLibraryLanguage.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        cmbLibraryLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbLibraryLanguage.Location = new Point(0, 16);
+        cmbLibraryLanguage.Name = "cmbLibraryLanguage";
+        cmbLibraryLanguage.Size = new Size(140, 23);
+        cmbLibraryLanguage.TabIndex = 2;
+        cmbLibraryLanguage.Items.AddRange(new object[] { "All Languages", "English", "Vietnamese", "Japanese", "Chinese", "Korean" });
+        cmbLibraryLanguage.SelectedIndex = 0;
         // 
         // btnLibrarySearch
         // 
