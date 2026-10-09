@@ -104,9 +104,23 @@ class VoiceStore:
         return True
 
     def reference(self, voice_id: str) -> Path:
-        result = self._safe_dir(voice_id) / "reference.wav"
+        folder = self._safe_dir(voice_id)
+        record_path = folder / "voice.json"
+        ref_filename = "reference.wav"
+        if record_path.is_file():
+            try:
+                record = json.loads(record_path.read_text(encoding="utf-8"))
+                ref_filename = record.get("reference_file", "reference.wav")
+            except Exception:
+                pass
+        result = folder / ref_filename
         if not result.is_file():
-            raise FileNotFoundError("Reference voice does not exist.")
+            # Fallback for old structure if someone changed JSON but not the file
+            if (folder / "reference.wav").is_file():
+                return folder / "reference.wav"
+            elif (folder / "preview.mp3").is_file():
+                return folder / "preview.mp3"
+            raise FileNotFoundError(f"Reference voice does not exist at {result}")
         return result
 
     def _safe_dir(self, voice_id: str) -> Path:

@@ -55,7 +55,8 @@ def get_voice(voice_id: str):
 def get_voice_reference(voice_id: str):
     try:
         path = voices.reference(voice_id)
-        return FileResponse(path, media_type="audio/wav")
+        media_type = "audio/mpeg" if path.suffix.lower() == ".mp3" else "audio/wav"
+        return FileResponse(path, media_type=media_type)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
 
