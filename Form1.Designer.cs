@@ -101,6 +101,7 @@ partial class Form1
     private DataGridViewTextBoxColumn colVoice = null!;
     private DataGridViewTextBoxColumn colLanguage = null!;
     private DataGridViewTextBoxColumn colStatus = null!;
+    private DataGridViewTextBoxColumn colSourceFile = null!;
 
     // =========================================================
     // VOICE LIBRARY
@@ -355,6 +356,7 @@ partial class Form1
         colVoice = new DataGridViewTextBoxColumn();
         colLanguage = new DataGridViewTextBoxColumn();
         colStatus = new DataGridViewTextBoxColumn();
+        colSourceFile = new DataGridViewTextBoxColumn();
         logsTextBox = new TextBox();
         tabVoiceLibrary = new TabPage();
         libraryRootLayout = new TableLayoutPanel();
@@ -1327,7 +1329,7 @@ partial class Form1
         dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
         dgvJobs.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
         dgvJobs.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-        dgvJobs.Columns.AddRange(new DataGridViewColumn[] { colId, colOutput, colTiming, colContent, colVoice, colLanguage, colStatus });
+        dgvJobs.Columns.AddRange(new DataGridViewColumn[] { colId, colOutput, colTiming, colContent, colVoice, colLanguage, colStatus, colSourceFile });
         dataGridViewCellStyle2.Alignment = DataGridViewContentAlignment.MiddleLeft;
         dataGridViewCellStyle2.BackColor = SystemColors.Window;
         dataGridViewCellStyle2.Font = new Font("Segoe UI", 9F);
@@ -1394,6 +1396,14 @@ partial class Form1
         colStatus.HeaderText = "Status";
         colStatus.Name = "colStatus";
         colStatus.ReadOnly = true;
+        // 
+        // colSourceFile
+        // 
+        colSourceFile.FillWeight = 100F;
+        colSourceFile.HeaderText = "Source File";
+        colSourceFile.Name = "colSourceFile";
+        colSourceFile.ReadOnly = true;
+        colSourceFile.Visible = true;
         // 
         // logsTextBox
         // 

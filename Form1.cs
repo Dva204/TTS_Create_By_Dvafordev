@@ -698,7 +698,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                         Interlocked.Increment(ref processing);
                         Invoke(() => { 
                             row.Cells[6].Value = "Running";
-                            lblCurrentJob.Text = $"Current: {cell0}";
+                            string source = row.Cells[7].Value?.ToString() ?? "File";
+                            lblCurrentJob.Text = $"Current: {cell0} ({source})";
                             try { dgv.FirstDisplayedScrollingRowIndex = rowIndex; } catch { }
                         });
 
@@ -778,46 +779,75 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
     private async void BtnJoinMp3_Click(object? sender, EventArgs e)
     {
         var txtFolder = Controls.Find("txtBatchFolder", true).FirstOrDefault() as TextBox;
-        if (txtFolder == null || string.IsNullOrWhiteSpace(txtFolder.Text)) return;
+        var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
+        if (txtFolder == null || string.IsNullOrWhiteSpace(txtFolder.Text) || dgv == null) return;
         
-        var wavFiles = Directory.GetFiles(txtFolder.Text, "*.wav")
-            .Where(f => !Path.GetFileName(f).Equals("000_Full_Audio.wav", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f).ToList();
-        if (wavFiles.Count == 0) return;
-
         SetBusy(true);
         try
         {
-            var listFile = Path.Combine(txtFolder.Text, "file_list.txt");
-            var outputWav = Path.Combine(txtFolder.Text, "000_Full_Audio.wav");
-            var lines = wavFiles.Select(f => $"file '{Path.GetFileName(f)}'").ToArray();
-            await File.WriteAllLinesAsync(listFile, lines, lifetime.Token);
+            var groups = new Dictionary<string, List<string>>();
 
-            var psi = new ProcessStartInfo("ffmpeg")
+            for (int i = 0; i < dgv.Rows.Count; i++)
             {
-                Arguments = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outputWav}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true
-            };
-            
-            var process = Process.Start(psi);
-            if (process != null)
+                var row = dgv.Rows[i];
+                var filename = row.Cells[1].Value?.ToString();
+                if (string.IsNullOrWhiteSpace(filename)) continue;
+                
+                var path = Path.Combine(txtFolder.Text, filename);
+                if (!File.Exists(path)) continue;
+
+                var sourceFile = row.Cells[7].Value?.ToString();
+                if (string.IsNullOrWhiteSpace(sourceFile)) sourceFile = "000_Full_Audio";
+                else sourceFile = "000_" + sourceFile;
+
+                if (!groups.ContainsKey(sourceFile)) groups[sourceFile] = new List<string>();
+                groups[sourceFile].Add(path);
+            }
+
+            if (groups.Count == 0) return;
+
+            foreach (var group in groups)
             {
-                await process.WaitForExitAsync(lifetime.Token);
-                if (process.ExitCode == 0)
+                var sourceName = group.Key;
+                var wavFiles = group.Value;
+                if (wavFiles.Count == 0) continue;
+
+                var listFile = Path.Combine(txtFolder.Text, $"file_list_{sourceName}.txt");
+                var outputWav = Path.Combine(txtFolder.Text, $"{sourceName}.wav");
+                var lines = wavFiles.Select(f => $"file '{Path.GetFileName(f)}'").ToArray();
+                await File.WriteAllLinesAsync(listFile, lines, lifetime.Token);
+
+                var psi = new ProcessStartInfo("ffmpeg")
                 {
-                    WriteLog($"Successfully joined {wavFiles.Count} files into joined_output.wav");
-                    if (Controls.Find("chkDeleteSegments", true).FirstOrDefault() is CheckBox chkDel && chkDel.Checked)
+                    Arguments = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outputWav}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true
+                };
+                
+                var process = Process.Start(psi);
+                if (process != null)
+                {
+                    await process.WaitForExitAsync(lifetime.Token);
+                    if (process.ExitCode == 0)
                     {
-                        foreach (var file in wavFiles)
-                        {
-                            try { File.Delete(file); } catch { }
-                        }
-                        WriteLog("Deleted individual segment files.");
+                        WriteLog($"Successfully joined {wavFiles.Count} files into {sourceName}.wav");
+                        try { File.Delete(listFile); } catch { }
+                    }
+                    else WriteLog($"FFmpeg join failed for {sourceName}: " + await process.StandardError.ReadToEndAsync());
+                }
+            }
+
+            if (Controls.Find("chkDeleteSegments", true).FirstOrDefault() is CheckBox chkDel && chkDel.Checked)
+            {
+                foreach (var group in groups)
+                {
+                    foreach (var file in group.Value)
+                    {
+                        try { File.Delete(file); } catch { }
                     }
                 }
-                else WriteLog("FFmpeg join failed: " + await process.StandardError.ReadToEndAsync());
+                WriteLog("Deleted individual segment files.");
             }
         }
         catch (Exception ex)
@@ -830,7 +860,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         }
     }
 
-    private void BtnImportFolder_Click(object? sender, EventArgs e)
+    private async void BtnImportFolder_Click(object? sender, EventArgs e)
     {
         using var dialog = new FolderBrowserDialog();
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
@@ -852,28 +882,33 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
         foreach (var file in files)
         {
-            string fullText = File.ReadAllText(file);
+            string sourceName = Path.GetFileNameWithoutExtension(file);
+            lblSubtitleStatus.Text = $"Subtitles | Importing: {sourceName}.txt";
+            await Task.Delay(10); // Let UI refresh
+
+            string fullText = await File.ReadAllTextAsync(file);
             if (autoSplit && !string.IsNullOrEmpty(splitChars))
             {
                 var segments = SmartSplit(fullText, splitChars, userSettings.MaxChars);
                 foreach (var seg in segments)
                 {
-                    dgv.Rows.Add(id.ToString("D3"), "", "", seg, voiceComboBox.Text, languageComboBox.Text, "Pending");
+                    dgv.Rows.Add(id.ToString("D3"), "", "", seg, voiceComboBox.Text, languageComboBox.Text, "Pending", sourceName);
                     id++; imported++;
                 }
             }
             else
             {
-                var lines = File.ReadAllLines(file);
+                var lines = await File.ReadAllLinesAsync(file);
                 foreach (var line in lines)
                 {
                     if (string.IsNullOrWhiteSpace(line)) continue;
-                    dgv.Rows.Add(id.ToString("D3"), "", "", line.Trim(), voiceComboBox.Text, languageComboBox.Text, "Pending");
+                    dgv.Rows.Add(id.ToString("D3"), "", "", line.Trim(), voiceComboBox.Text, languageComboBox.Text, "Pending", sourceName);
                     id++; imported++;
                 }
             }
         }
         
+        lblSubtitleStatus.Text = $"Subtitles | Done: 0 | Processing: 0 | Total: {dgv.Rows.Count} | Failed: 0 | Elapsed: 00:00";
         WriteLog($"Imported {imported} segments from folder {Path.GetFileName(dialog.SelectedPath)}");
     }
 
