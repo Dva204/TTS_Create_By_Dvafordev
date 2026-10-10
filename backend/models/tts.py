@@ -13,6 +13,6 @@ class TtsGenerationSettings(BaseModel):
 class GenerateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=5000)
     voice_id: str
-    language: str = Field(min_length=2, max_length=16)
+    language: str = Field(min_length=0, max_length=16)
     engine: str = "chatterbox_multilingual"
     settings: TtsGenerationSettings = Field(default_factory=TtsGenerationSettings)

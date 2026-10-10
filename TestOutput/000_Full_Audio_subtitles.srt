@@ -1,0 +1,24 @@
+1
+00:00:00,000 --> 00:00:03,300
+Hello there! Welcome to the AI Text to Speech studio.
+
+2
+00:00:03,300 --> 00:00:07,680
+This is a test script to evaluate the capabilities of the voice engine.
+
+3
+00:00:07,680 --> 00:00:11,100
+Did the auto-split function correctly separate these sentences?
+
+4
+00:00:11,100 --> 00:00:12,600
+I really hope it did!
+
+5
+00:00:12,600 --> 00:00:16,619
+Now, let's see how well the AI reads this entire paragraph.
+
+6
+00:00:16,619 --> 00:00:19,799
+It should sound perfectly natural and engaging.
+

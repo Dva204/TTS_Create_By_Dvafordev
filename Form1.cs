@@ -721,7 +721,9 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
                 if (skipExisting && File.Exists(path))
                 {
+                    double dur = await GetAudioDurationSecs(path);
                     row.Cells[1].Value = filename;
+                    row.Cells[2].Value = dur.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     row.Cells[6].Value = "Completed";
                     WriteLog($"Segment {row.Cells[0].Value} skipped (already exists).");
                     Interlocked.Increment(ref done);
@@ -783,8 +785,10 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                                     await File.WriteAllBytesAsync(path, audioBytes, token);
                                 }
                                 try { await api.CancelJobAsync(jobId, token); } catch { }
+                                double dur = await GetAudioDurationSecs(path);
                                 Invoke(() => {
                                     row.Cells[1].Value = filename;
+                                    row.Cells[2].Value = dur.ToString(System.Globalization.CultureInfo.InvariantCulture);
                                     row.Cells[6].Value = "Completed";
                                 });
                                 WriteLog($"Segment {cell0} completed.");
@@ -1002,6 +1006,34 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         await GenerateSrtTask();
     }
     
+    private async Task<double> GetAudioDurationSecs(string path)
+    {
+        double durationSecs = 0;
+        try {
+            var psi = new ProcessStartInfo("ffprobe") {
+                Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{path}\"",
+                RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
+            };
+            var proc = Process.Start(psi);
+            if (proc != null) {
+                var outStr = await proc.StandardOutput.ReadToEndAsync();
+                await proc.WaitForExitAsync();
+                if (double.TryParse(outStr.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double d)) {
+                    durationSecs = d;
+                }
+            }
+        } catch { }
+
+        if (durationSecs <= 0) {
+            try {
+                var fi = new FileInfo(path);
+                durationSecs = (fi.Length - 44) / 48000.0;
+                if (durationSecs < 0) durationSecs = 0;
+            } catch { }
+        }
+        return durationSecs;
+    }
+    
     private async Task GenerateSrtTask()
     {
         var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
@@ -1032,35 +1064,26 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
             foreach (var row in group.Value)
             {
-                var filename = row.Cells[1].Value?.ToString();
-                if (string.IsNullOrEmpty(filename)) continue;
-                
-                var path = Path.Combine(txtFolder.Text, filename);
-                if (!File.Exists(path)) continue;
-                
                 double durationSecs = 0;
-                try {
-                    var psi = new ProcessStartInfo("ffprobe") {
-                        Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{path}\"",
-                        RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
-                    };
-                    var proc = Process.Start(psi);
-                    if (proc != null) {
-                        var outStr = await proc.StandardOutput.ReadToEndAsync();
-                        await proc.WaitForExitAsync(lifetime.Token);
-                        if (double.TryParse(outStr.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double d)) {
-                            durationSecs = d;
-                        }
-                    }
-                } catch { }
-
-                if (durationSecs <= 0) {
-                    try {
-                        var fi = new FileInfo(path);
-                        durationSecs = (fi.Length - 44) / 48000.0;
-                        if (durationSecs < 0) durationSecs = 0;
-                    } catch { }
+                var timingValue = row.Cells[2].Value?.ToString();
+                
+                if (!string.IsNullOrEmpty(timingValue) && double.TryParse(timingValue, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double dur))
+                {
+                    durationSecs = dur;
                 }
+                else
+                {
+                    var filename = row.Cells[1].Value?.ToString();
+                    if (string.IsNullOrEmpty(filename)) continue;
+                    
+                    var path = Path.Combine(txtFolder.Text, filename);
+                    if (!File.Exists(path)) continue;
+                    
+                    durationSecs = await GetAudioDurationSecs(path);
+                    row.Cells[2].Value = durationSecs.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+                
+                if (durationSecs <= 0) continue;
 
                 var start = current;
                 var end = current.Add(TimeSpan.FromSeconds(durationSecs));
