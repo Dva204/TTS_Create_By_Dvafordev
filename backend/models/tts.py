@@ -8,6 +8,7 @@ class TtsGenerationSettings(BaseModel):
     exaggeration: float = 0.5
     speaker_boost: bool = True
     seed: int | None = None
+    denoise: float = 0.0
 
 
 class GenerateRequest(BaseModel):

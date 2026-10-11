@@ -27,7 +27,8 @@ public sealed record TtsGenerationSettings(
     [property: JsonPropertyName("temperature")] double Temperature,
     [property: JsonPropertyName("exaggeration")] double Exaggeration,
     [property: JsonPropertyName("speaker_boost")] bool SpeakerBoost,
-    [property: JsonPropertyName("seed")] int? Seed = null);
+    [property: JsonPropertyName("seed")] int? Seed = null,
+    [property: JsonPropertyName("denoise")] double Denoise = 0.0);
 
 public sealed record GenerateRequest(
     string Text,

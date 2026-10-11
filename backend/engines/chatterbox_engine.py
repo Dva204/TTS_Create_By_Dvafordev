@@ -50,4 +50,18 @@ class ChatterboxMultilingualEngine(TtsEngine):
                 temperature=settings.temperature
             )
             output.parent.mkdir(parents=True, exist_ok=True)
-            self._torchaudio.save(str(output), wav.detach().cpu(), self._model.sr, encoding="PCM_S", bits_per_sample=16)
+            
+            wav_cpu = wav.detach().cpu()
+            if getattr(settings, 'denoise', 0.0) > 0:
+                try:
+                    import noisereduce as nr
+                    import numpy as np
+                    # noisereduce expects 1D or 2D numpy array
+                    wav_np = wav_cpu.squeeze(0).numpy()
+                    reduced_np = nr.reduce_noise(y=wav_np, sr=self._model.sr, prop_decrease=settings.denoise)
+                    wav_cpu = self._torch.from_numpy(reduced_np).unsqueeze(0)
+                except ImportError:
+                    print("noisereduce is not installed, skipping denoising.")
+                    pass
+
+            self._torchaudio.save(str(output), wav_cpu, self._model.sr, encoding="PCM_S", bits_per_sample=16)

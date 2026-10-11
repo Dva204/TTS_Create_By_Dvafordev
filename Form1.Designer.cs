@@ -45,6 +45,8 @@ partial class Form1
     private Label lblStyle = null!;
     private NumericUpDown numStyle = null!;
     private CheckBox chkSpeakerBoost = null!;
+    private Label lblDenoise = null!;
+    private NumericUpDown numDenoise = null!;
     private Button btnResetVoiceSettings = null!;
 
     private GroupBox grpSystem = null!;
@@ -302,6 +304,8 @@ partial class Form1
         lblStyle = new Label();
         numStyle = new NumericUpDown();
         chkSpeakerBoost = new CheckBox();
+        lblDenoise = new Label();
+        numDenoise = new NumericUpDown();
         btnResetVoiceSettings = new Button();
         grpSystem = new GroupBox();
         lblDevice = new Label();
@@ -352,9 +356,9 @@ partial class Form1
         tabVoiceLibrary = new TabPage();
         libraryRootLayout = new TableLayoutPanel();
         libraryHeaderLayout = new TableLayoutPanel();
-        cmbLibraryLanguage = new ComboBox();
         lblLibraryTitle = new Label();
         txtLibrarySearch = new TextBox();
+        cmbLibraryLanguage = new ComboBox();
         btnLibrarySearch = new Button();
         btnLibraryRefresh = new Button();
         btnLibraryAddVoice = new Button();
@@ -484,6 +488,7 @@ partial class Form1
         ((System.ComponentModel.ISupportInitialize)numStability).BeginInit();
         ((System.ComponentModel.ISupportInitialize)numSimilarity).BeginInit();
         ((System.ComponentModel.ISupportInitialize)numStyle).BeginInit();
+        ((System.ComponentModel.ISupportInitialize)numDenoise).BeginInit();
         grpSystem.SuspendLayout();
         batchOptionsLayout.SuspendLayout();
         grpBatchJob.SuspendLayout();
@@ -711,6 +716,8 @@ partial class Form1
         grpVoiceSettings.Controls.Add(lblStyle);
         grpVoiceSettings.Controls.Add(numStyle);
         grpVoiceSettings.Controls.Add(chkSpeakerBoost);
+        grpVoiceSettings.Controls.Add(lblDenoise);
+        grpVoiceSettings.Controls.Add(numDenoise);
         grpVoiceSettings.Controls.Add(btnResetVoiceSettings);
         grpVoiceSettings.Dock = DockStyle.Fill;
         grpVoiceSettings.Location = new Point(575, 0);
@@ -817,12 +824,28 @@ partial class Form1
         chkSpeakerBoost.Text = "Speaker Boost";
         chkSpeakerBoost.UseVisualStyleBackColor = true;
         // 
+        // lblDenoise
+        // 
+        lblDenoise.AutoSize = true;
+        lblDenoise.Location = new Point(205, 116);
+        lblDenoise.Name = "lblDenoise";
+        lblDenoise.Size = new Size(65, 15);
+        lblDenoise.TabIndex = 10;
+        lblDenoise.Text = "Denoise %:";
+        // 
+        // numDenoise
+        // 
+        numDenoise.Location = new Point(275, 112);
+        numDenoise.Name = "numDenoise";
+        numDenoise.Size = new Size(55, 23);
+        numDenoise.TabIndex = 11;
+        // 
         // btnResetVoiceSettings
         // 
-        btnResetVoiceSettings.Location = new Point(297, 109);
+        btnResetVoiceSettings.Location = new Point(335, 109);
         btnResetVoiceSettings.Name = "btnResetVoiceSettings";
         btnResetVoiceSettings.Size = new Size(75, 27);
-        btnResetVoiceSettings.TabIndex = 10;
+        btnResetVoiceSettings.TabIndex = 12;
         btnResetVoiceSettings.Text = "Reset";
         btnResetVoiceSettings.UseVisualStyleBackColor = true;
         // 
@@ -1412,19 +1435,18 @@ partial class Form1
         txtLibrarySearch.Location = new Point(168, 16);
         txtLibrarySearch.Name = "txtLibrarySearch";
         txtLibrarySearch.PlaceholderText = "Search voice id...";
-        txtLibrarySearch.Size = new Size(745, 23);
+        txtLibrarySearch.Size = new Size(595, 23);
         txtLibrarySearch.TabIndex = 1;
-        //
+        // 
         // cmbLibraryLanguage
-        //
+        // 
         cmbLibraryLanguage.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         cmbLibraryLanguage.DropDownStyle = ComboBoxStyle.DropDownList;
-        cmbLibraryLanguage.Location = new Point(0, 16);
-        cmbLibraryLanguage.Name = "cmbLibraryLanguage";
-        cmbLibraryLanguage.Size = new Size(140, 23);
-        cmbLibraryLanguage.TabIndex = 2;
         cmbLibraryLanguage.Items.AddRange(new object[] { "All Languages", "English", "Vietnamese", "Japanese", "Chinese", "Korean" });
-        cmbLibraryLanguage.SelectedIndex = 0;
+        cmbLibraryLanguage.Location = new Point(769, 16);
+        cmbLibraryLanguage.Name = "cmbLibraryLanguage";
+        cmbLibraryLanguage.Size = new Size(144, 23);
+        cmbLibraryLanguage.TabIndex = 2;
         // 
         // btnLibrarySearch
         // 
@@ -2355,9 +2377,9 @@ partial class Form1
         // 
         cmbVideoQuality.DropDownStyle = ComboBoxStyle.DropDownList;
         cmbVideoQuality.Items.AddRange(new object[] { "Fast", "Balanced", "Maximum Quality" });
-        cmbVideoQuality.Location = new Point(335, 104);
+        cmbVideoQuality.Location = new Point(334, 100);
         cmbVideoQuality.Name = "cmbVideoQuality";
-        cmbVideoQuality.Size = new Size(150, 23);
+        cmbVideoQuality.Size = new Size(95, 23);
         cmbVideoQuality.TabIndex = 9;
         // 
         // chkKenBurns
@@ -2376,7 +2398,7 @@ partial class Form1
         chkCrossfade.AutoSize = true;
         chkCrossfade.Checked = true;
         chkCrossfade.CheckState = CheckState.Checked;
-        chkCrossfade.Location = new Point(115, 145);
+        chkCrossfade.Location = new Point(100, 145);
         chkCrossfade.Name = "chkCrossfade";
         chkCrossfade.Size = new Size(78, 19);
         chkCrossfade.TabIndex = 11;
@@ -2385,7 +2407,7 @@ partial class Form1
         // chkBurnSubtitle
         // 
         chkBurnSubtitle.AutoSize = true;
-        chkBurnSubtitle.Location = new Point(225, 145);
+        chkBurnSubtitle.Location = new Point(184, 145);
         chkBurnSubtitle.Name = "chkBurnSubtitle";
         chkBurnSubtitle.Size = new Size(94, 19);
         chkBurnSubtitle.TabIndex = 12;
@@ -2396,7 +2418,7 @@ partial class Form1
         chkHardwareEncoding.AutoSize = true;
         chkHardwareEncoding.Checked = true;
         chkHardwareEncoding.CheckState = CheckState.Checked;
-        chkHardwareEncoding.Location = new Point(345, 145);
+        chkHardwareEncoding.Location = new Point(284, 145);
         chkHardwareEncoding.Name = "chkHardwareEncoding";
         chkHardwareEncoding.Size = new Size(119, 19);
         chkHardwareEncoding.TabIndex = 13;
@@ -2800,6 +2822,7 @@ partial class Form1
         ((System.ComponentModel.ISupportInitialize)numStability).EndInit();
         ((System.ComponentModel.ISupportInitialize)numSimilarity).EndInit();
         ((System.ComponentModel.ISupportInitialize)numStyle).EndInit();
+        ((System.ComponentModel.ISupportInitialize)numDenoise).EndInit();
         grpSystem.ResumeLayout(false);
         grpSystem.PerformLayout();
         batchOptionsLayout.ResumeLayout(false);

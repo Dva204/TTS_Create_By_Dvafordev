@@ -56,6 +56,7 @@ public partial class Form1 : Form
             if (Controls.Find("numSimilarity", true).FirstOrDefault() is NumericUpDown numSim) numSim.Value = 60m;
             if (Controls.Find("numStyle", true).FirstOrDefault() is NumericUpDown numSty) numSty.Value = 50m;
             if (Controls.Find("chkSpeakerBoost", true).FirstOrDefault() is CheckBox chkBoost) chkBoost.Checked = true;
+            if (Controls.Find("numDenoise", true).FirstOrDefault() is NumericUpDown numDen) numDen.Value = 0m;
         };
         if (Controls.Find("btnAdvancedSettings", true).FirstOrDefault() is Button btnAdvSet) btnAdvSet.Click += (s, e) => MessageBox.Show(this, "Advanced Settings will be available in the next update!", "Coming Soon", MessageBoxButtons.OK, MessageBoxIcon.Information);
         if (Controls.Find("btnCopyVoiceId", true).FirstOrDefault() is Button btnCopyId) btnCopyId.Click += BtnCopyVoiceId_Click;
@@ -86,6 +87,15 @@ public partial class Form1 : Form
         {
             txtBatchFolder.TextChanged += (s, e) => UpdateToolbarState();
         }
+
+        // Set Default Video Settings
+        if (Controls.Find("cmbResolution", true).FirstOrDefault() is ComboBox cmbRes && cmbRes.Items.Count > 0) cmbRes.SelectedIndex = 0; // 1920x1080
+        if (Controls.Find("cmbFps", true).FirstOrDefault() is ComboBox cmbF && cmbF.Items.Count > 1) cmbF.SelectedIndex = 1; // 30
+        if (Controls.Find("cmbAspectRatio", true).FirstOrDefault() is ComboBox cmbAspect && cmbAspect.Items.Count > 0) cmbAspect.SelectedIndex = 0; // 16:9
+        if (Controls.Find("cmbEncoder", true).FirstOrDefault() is ComboBox cmbEnc && cmbEnc.Items.Count > 0) cmbEnc.SelectedIndex = 0; // Auto
+        if (Controls.Find("cmbVideoQuality", true).FirstOrDefault() is ComboBox cmbQual && cmbQual.Items.Count > 2) cmbQual.SelectedIndex = 2; // Maximum Quality
+        if (Controls.Find("cmbTimelineMode", true).FirstOrDefault() is ComboBox cmbTime && cmbTime.Items.Count > 0) cmbTime.SelectedIndex = 0; // From SRT
+        if (Controls.Find("cmbImageMapping", true).FirstOrDefault() is ComboBox cmbImgMap && cmbImgMap.Items.Count > 0) cmbImgMap.SelectedIndex = 0;
     }
 
 
@@ -477,11 +487,13 @@ public partial class Form1 : Form
         if (Controls.Find("chkChangeVoiceSettings", true).FirstOrDefault() is CheckBox chkChange && chkChange.Checked)
         {
             settings = new TtsGenerationSettings(
-                (double)((Controls.Find("numSpeed", true).FirstOrDefault() as NumericUpDown)?.Value ?? 1m),
-                (double)((Controls.Find("numSimilarity", true).FirstOrDefault() as NumericUpDown)?.Value ?? 60m),
-                (double)((Controls.Find("numStability", true).FirstOrDefault() as NumericUpDown)?.Value ?? 65m),
-                (double)((Controls.Find("numStyle", true).FirstOrDefault() as NumericUpDown)?.Value ?? 50m),
-                (Controls.Find("chkSpeakerBoost", true).FirstOrDefault() as CheckBox)?.Checked ?? true
+                Speed: (double)((Controls.Find("numSpeed", true).FirstOrDefault() as NumericUpDown)?.Value ?? 1m),
+                CfgWeight: (double)((Controls.Find("numStability", true).FirstOrDefault() as NumericUpDown)?.Value ?? 65m) / 100.0,
+                Temperature: (double)((Controls.Find("numSimilarity", true).FirstOrDefault() as NumericUpDown)?.Value ?? 60m) / 100.0,
+                Exaggeration: (double)((Controls.Find("numStyle", true).FirstOrDefault() as NumericUpDown)?.Value ?? 50m) / 100.0,
+                SpeakerBoost: (Controls.Find("chkSpeakerBoost", true).FirstOrDefault() as CheckBox)?.Checked ?? true,
+                Seed: null,
+                Denoise: (double)((Controls.Find("numDenoise", true).FirstOrDefault() as NumericUpDown)?.Value ?? 0m) / 100.0
             );
         }
 
@@ -682,7 +694,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 Temperature: (double)numSimilarity.Value / 100.0,
                 Exaggeration: (double)numStyle.Value / 100.0,
                 SpeakerBoost: chkSpeakerBoost.Checked,
-                Seed: null
+                Seed: null,
+                Denoise: (double)numDenoise.Value / 100.0
             );
             string lang = GetLangCode(languageComboBox.Text);
             string engineTxt = engineComboBox.Text;
@@ -1166,8 +1179,7 @@ private void BtnBrowseVideoAudio_Click(object? sender, EventArgs e)
             .OrderBy(f => f)
             .ToList();
 
-        dgv.Rows.Clear();
-        int imageIndex = 0;
+        var parsedSubs = new List<(string id, string start, string end, TimeSpan tsStart, TimeSpan tsEnd, string content)>();
 
         for (int i = 0; i < lines.Length; i++)
         {
@@ -1184,26 +1196,88 @@ private void BtnBrowseVideoAudio_Click(object? sender, EventArgs e)
 
                 if (!string.IsNullOrWhiteSpace(content))
                 {
-                    // Parse start and end time: "00:00:00,000 --> 00:00:05,000"
                     var times = timing.Split(new[] { "-->" }, StringSplitOptions.None);
                     string start = times.Length > 0 ? times[0].Trim() : "";
                     string end = times.Length > 1 ? times[1].Trim() : "";
-
-                    string duration = "";
-                    if (TimeSpan.TryParse(start.Replace(",", "."), out var tsStart) && TimeSpan.TryParse(end.Replace(",", "."), out var tsEnd))
+                    
+                    if (TimeSpan.TryParse(start.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture, out var tsStart) && 
+                        TimeSpan.TryParse(end.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture, out var tsEnd))
                     {
-                        duration = (tsEnd - tsStart).TotalSeconds.ToString("0.00") + "s";
+                        parsedSubs.Add((id.ToString("D3"), start, end, tsStart, tsEnd, content.Trim()));
                     }
-
-                    string imgPath = images.Count > 0 ? Path.GetFileName(images[imageIndex % images.Count]) : "";
-                    imageIndex++;
-
-                    dgv.Rows.Add(id.ToString("D3"), start, end, duration, imgPath, content.Trim(), "Pending");
                 }
             }
         }
 
+        dgv.Rows.Clear();
+        int imageIndex = 0;
+        for (int i = 0; i < parsedSubs.Count; i++)
+        {
+            var sub = parsedSubs[i];
+            TimeSpan durationTs = sub.tsEnd - sub.tsStart;
+            
+            // If there's a next subtitle, the duration of THIS image should span until the NEXT subtitle starts
+            // This perfectly accounts for any silent gaps between subtitles.
+            if (i < parsedSubs.Count - 1)
+            {
+                durationTs = parsedSubs[i + 1].tsStart - sub.tsStart;
+            }
+
+            string duration = durationTs.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "s";
+            string imgPath = images.Count > 0 ? Path.GetFileName(images[imageIndex % images.Count]) : "";
+            imageIndex++;
+
+            dgv.Rows.Add(sub.id, sub.start, sub.end, duration, imgPath, sub.content, "Pending");
+        }
+
         WriteLog($"Analyzed timeline: {dgv.Rows.Count} segments matched with {images.Count} images.");
+    }
+    private async Task<string> MonitorFfmpegProgress(Process process)
+    {
+        double totalDuration = 0;
+        var sb = new System.Text.StringBuilder();
+        var lblStatus = Controls.Find("lblVideoRenderStatus", true).FirstOrDefault() as Label;
+        var pBar = Controls.Find("progressVideoRender", true).FirstOrDefault() as ProgressBar;
+
+        if (lblStatus != null) Invoke(() => lblStatus.Text = "Rendering... 0%");
+        if (pBar != null) Invoke(() => { pBar.Style = ProgressBarStyle.Continuous; pBar.Value = 0; });
+
+        using var reader = process.StandardError;
+        while (!reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync();
+            if (string.IsNullOrEmpty(line)) continue;
+            sb.AppendLine(line);
+            
+            if (totalDuration <= 0 && line.Contains("Duration:"))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d+)");
+                if (match.Success)
+                {
+                    TimeSpan ts = new TimeSpan(0, int.Parse(match.Groups[1].Value), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value), int.Parse(match.Groups[4].Value) * 10);
+                    totalDuration = ts.TotalSeconds;
+                }
+            }
+
+            if (line.StartsWith("frame=") || line.Contains("time="))
+            {
+                var timeMatch = System.Text.RegularExpressions.Regex.Match(line, @"time=(\d{2}):(\d{2}):(\d{2})\.(\d+)");
+                if (timeMatch.Success && totalDuration > 0)
+                {
+                    TimeSpan ts = new TimeSpan(0, int.Parse(timeMatch.Groups[1].Value), int.Parse(timeMatch.Groups[2].Value), int.Parse(timeMatch.Groups[3].Value), int.Parse(timeMatch.Groups[4].Value) * 10);
+                    int pct = (int)((ts.TotalSeconds / totalDuration) * 100);
+                    if (pct < 0) pct = 0;
+                    if (pct > 100) pct = 100;
+                    
+                    if (pBar != null && lblStatus != null) Invoke(() => {
+                        pBar.Value = pct;
+                        lblStatus.Text = $"Rendering... {pct}%";
+                    });
+                }
+            }
+        }
+        
+        return sb.ToString();
     }
 
     private async void BtnRenderVideo_Click(object? sender, EventArgs e)
@@ -1221,58 +1295,135 @@ private void BtnBrowseVideoAudio_Click(object? sender, EventArgs e)
             return;
         }
 
+        string outputMp4 = "";
+        using (var sfd = new SaveFileDialog { Filter = "MP4 Video|*.mp4", DefaultExt = "mp4", FileName = "final_render.mp4" })
+        {
+            if (sfd.ShowDialog(this) != DialogResult.OK) return;
+            outputMp4 = sfd.FileName;
+        }
+
         SetBusy(true);
         try
         {
-            var outputMp4 = Path.Combine(Path.GetDirectoryName(txtAudio.Text) ?? "", "final_render.mp4");
-            var tempDir = Path.Combine(Path.GetDirectoryName(txtAudio.Text) ?? "", "temp_frames");
+            var tempDir = Path.Combine(Path.GetDirectoryName(outputMp4) ?? "", "temp_frames");
             Directory.CreateDirectory(tempDir);
 
-            WriteLog("Starting FFmpeg render...");
+            // Read user settings
+            int targetW = 1920;
+            int targetH = 1080;
+            var cmbRes = Controls.Find("cmbResolution", true).FirstOrDefault() as ComboBox;
+            if (cmbRes?.SelectedItem != null)
+            {
+                var parts = cmbRes.SelectedItem.ToString()!.Split('x');
+                if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out int w) && int.TryParse(parts[1].Trim(), out int h))
+                {
+                    targetW = w;
+                    targetH = h;
+                }
+            }
 
-            // For simplicity in this demo, we'll use a basic FFmpeg command to combine a single image + audio.
-            // A true slideshow requires complex filter_complex, which takes lots of code.
-            // We'll write an ffconcat file.
-            
-            var concatFile = Path.Combine(tempDir, "slides.txt");
-            var sb = new System.Text.StringBuilder();
-            
+            int fps = 30;
+            var cmbFpsCtrl = Controls.Find("cmbFps", true).FirstOrDefault() as ComboBox;
+            if (cmbFpsCtrl?.SelectedItem != null && int.TryParse(cmbFpsCtrl.SelectedItem.ToString()!.Trim(), out int parsedFps))
+            {
+                fps = parsedFps;
+            }
+
+            var cmbEnc = Controls.Find("cmbEncoder", true).FirstOrDefault() as ComboBox;
+            string encChoice = cmbEnc?.SelectedItem?.ToString() ?? "Auto";
+            bool useGpu = false;
+            if (encChoice == "NVIDIA NVENC") useGpu = true;
+            else if (encChoice == "CPU x264" || encChoice == "CPU x265") useGpu = false;
+            else
+            {
+                var system = await api.GetSystemAsync(lifetime.Token);
+                useGpu = system?.CudaAvailable == true;
+            }
+
+            string vcodec = useGpu ? "h264_nvenc -preset p6 -cq 23" : (encChoice == "CPU x265" ? "libx265 -crf 26 -preset fast" : "libx264 -crf 23 -preset veryfast");
+
+            WriteLog($"Starting video render: {targetW}x{targetH} @ {fps}fps, encoder: {(useGpu ? "NVENC" : "CPU")}...");
+
+            // Pre-process and normalize all unique images to target resolution
+            var imageCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int imgCounter = 0;
+
             foreach (DataGridViewRow row in dgv.Rows)
             {
                 var imgName = row.Cells[4].Value?.ToString();
-                var durationStr = row.Cells[3].Value?.ToString()?.Replace("s", "");
+                if (string.IsNullOrEmpty(imgName)) continue;
                 
-                if (!string.IsNullOrEmpty(imgName) && !string.IsNullOrEmpty(durationStr))
+                var origPath = Path.Combine(txtImg.Text, imgName);
+                if (!File.Exists(origPath)) continue;
+
+                if (!imageCache.ContainsKey(origPath))
                 {
-                    var imgPath = Path.Combine(txtImg.Text, imgName).Replace("\\", "/");
-                    sb.AppendLine($"file '{imgPath}'");
-                    sb.AppendLine($"duration {durationStr}");
+                    string localImgName = $"frame_{imgCounter:D4}.png";
+                    string localImgPath = Path.Combine(tempDir, localImgName);
+                    
+                    using (var src = Image.FromFile(origPath))
+                    using (var bmp = new Bitmap(targetW, targetH))
+                    using (var g = Graphics.FromImage(bmp))
+                    {
+                        g.Clear(Color.Black);
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        double ratio = Math.Min((double)targetW / src.Width, (double)targetH / src.Height);
+                        int newW = Math.Max(1, (int)(src.Width * ratio));
+                        int newH = Math.Max(1, (int)(src.Height * ratio));
+                        int posX = (targetW - newW) / 2;
+                        int posY = (targetH - newH) / 2;
+                        g.DrawImage(src, posX, posY, newW, newH);
+                        bmp.Save(localImgPath, System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                    imageCache[origPath] = localImgName;
+                    imgCounter++;
                 }
             }
-            
-            // Repeat last image to avoid ffconcat glitch
-            if (dgv.Rows.Count > 0)
+
+            // Generate ffconcat slides.txt
+            var concatFile = Path.Combine(tempDir, "slides.txt");
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("ffconcat version 1.0");
+
+            string lastLocalImg = "";
+            foreach (DataGridViewRow row in dgv.Rows)
             {
-                var lastRow = dgv.Rows[dgv.Rows.Count - 1];
-                var imgName = lastRow.Cells[4].Value?.ToString();
-                if (!string.IsNullOrEmpty(imgName))
+                var imgName = row.Cells[4].Value?.ToString();
+                var durationStr = row.Cells[3].Value?.ToString()?.Replace("s", "")?.Replace(",", ".");
+                
+                if (!string.IsNullOrEmpty(imgName) && !string.IsNullOrEmpty(durationStr) && double.TryParse(durationStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double durVal))
                 {
-                    var imgPath = Path.Combine(txtImg.Text, imgName).Replace("\\", "/");
-                    sb.AppendLine($"file '{imgPath}'");
+                    var origPath = Path.Combine(txtImg.Text, imgName);
+                    if (imageCache.TryGetValue(origPath, out var localImgName))
+                    {
+                        sb.AppendLine($"file '{localImgName}'");
+                        sb.AppendLine($"duration {durVal.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}");
+                        lastLocalImg = localImgName;
+                    }
                 }
+            }
+
+            // Concat demuxer requirement: repeat the last file without duration directive
+            if (!string.IsNullOrEmpty(lastLocalImg))
+            {
+                sb.AppendLine($"file '{lastLocalImg}'");
             }
 
             await File.WriteAllTextAsync(concatFile, sb.ToString(), lifetime.Token);
 
-            var system = await api.GetSystemAsync(lifetime.Token);
-            bool useGpu = system?.CudaAvailable == true;
-            string vcodec = useGpu ? "h264_nvenc -preset p6 -cq 23" : "libx264 -crf 23 -preset veryfast";
+            // Copy SRT to temp folder to avoid Windows path colon escaping issues in FFmpeg filter
+            string localSrtName = "subs.srt";
+            string localSrtPath = Path.Combine(tempDir, localSrtName);
+            File.Copy(txtSrt.Text, localSrtPath, true);
 
-            string srtPath = txtSrt.Text.Replace("\\", "/");
-            // FFmpeg command to concat images, add audio, and burn subtitles
+            bool burnSub = (Controls.Find("chkBurnSubtitle", true).FirstOrDefault() as CheckBox)?.Checked == true;
+            string vfOpt = burnSub ? $"subtitles='{localSrtName}',fps={fps}" : $"fps={fps}";
+
+            // Run FFmpeg with constant framerate and audio sync
             var psi = new ProcessStartInfo("ffmpeg")
             {
-                Arguments = $"-y -f concat -safe 0 -i \"{concatFile}\" -i \"{txtAudio.Text}\" -vf \"subtitles='{srtPath.Replace(":", "\\\\:")}'\" -c:v {vcodec} -pix_fmt yuv420p -c:a aac \"{outputMp4}\"",
+                WorkingDirectory = tempDir,
+                Arguments = $"-y -f concat -safe 0 -i \"slides.txt\" -i \"{txtAudio.Text}\" -vf \"{vfOpt}\" -c:v {vcodec} -r {fps} -pix_fmt yuv420p -c:a aac -shortest \"{outputMp4}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true
@@ -1282,37 +1433,52 @@ private void BtnBrowseVideoAudio_Click(object? sender, EventArgs e)
             var process = Process.Start(psi);
             if (process != null)
             {
+                string err = await MonitorFfmpegProgress(process);
                 await process.WaitForExitAsync(lifetime.Token);
+                
+                var lblStatus = Controls.Find("lblVideoRenderStatus", true).FirstOrDefault() as Label;
+                var pBar = Controls.Find("progressVideoRender", true).FirstOrDefault() as ProgressBar;
+
                 if (process.ExitCode == 0)
                 {
-                    WriteLog($"Render completed successfully: final_render.mp4");
+                    WriteLog($"Render completed successfully: {outputMp4}");
+                    if (lblStatus != null) Invoke(() => lblStatus.Text = "Render completed!");
+                    if (pBar != null) Invoke(() => pBar.Value = 100);
+                    
                     Process.Start(new ProcessStartInfo(outputMp4) { UseShellExecute = true });
+                    try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{outputMp4}\"") { UseShellExecute = true }); } catch { }
                 }
                 else
                 {
-                    string err = await process.StandardError.ReadToEndAsync();
                     if (useGpu)
                     {
                         WriteLog("GPU render failed, falling back to CPU (libx264)...");
-                        psi.Arguments = $"-y -f concat -safe 0 -i \"{concatFile}\" -i \"{txtAudio.Text}\" -vf \"subtitles='{srtPath.Replace(":", "\\\\:")}'\" -c:v libx264 -crf 23 -preset veryfast -pix_fmt yuv420p -c:a aac \"{outputMp4}\"";
+                        psi.Arguments = $"-y -f concat -safe 0 -i \"slides.txt\" -i \"{txtAudio.Text}\" -vf \"{vfOpt}\" -c:v libx264 -crf 23 -preset veryfast -r {fps} -pix_fmt yuv420p -c:a aac -shortest \"{outputMp4}\"";
                         var fbProcess = Process.Start(psi);
                         if (fbProcess != null)
                         {
+                            string fbErr = await MonitorFfmpegProgress(fbProcess);
                             await fbProcess.WaitForExitAsync(lifetime.Token);
                             if (fbProcess.ExitCode == 0)
                             {
-                                WriteLog($"Render completed successfully: final_render.mp4");
+                                WriteLog($"Render completed successfully: {outputMp4}");
+                                if (lblStatus != null) Invoke(() => lblStatus.Text = "Render completed (CPU Fallback)!");
+                                if (pBar != null) Invoke(() => pBar.Value = 100);
+
                                 Process.Start(new ProcessStartInfo(outputMp4) { UseShellExecute = true });
+                                try { Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{outputMp4}\"") { UseShellExecute = true }); } catch { }
                             }
                             else
                             {
-                                WriteLog("FFmpeg fallback render failed: " + await fbProcess.StandardError.ReadToEndAsync());
+                                WriteLog("FFmpeg fallback render failed: " + fbErr);
+                                if (lblStatus != null) Invoke(() => lblStatus.Text = "Render Failed!");
                             }
                         }
                     }
                     else
                     {
                         WriteLog("FFmpeg render failed: " + err);
+                        if (lblStatus != null) Invoke(() => lblStatus.Text = "Render Failed!");
                     }
                 }
             }
@@ -1346,7 +1512,7 @@ private async void BtnGeneratePreview_Click(object? sender, EventArgs e)
             SetBusy(true);
             try {
                 WriteLog($"Generating preview for {v.Name}...");
-                var req = new GenerateRequest(txt.Text, v.Id, "en", engineComboBox.Text, new TtsGenerationSettings(1.0, 0.5, 0.8, 0.5, true));
+                var req = new GenerateRequest(txt.Text, v.Id, "en", engineComboBox.Text, new TtsGenerationSettings(1.0, 0.5, 0.8, 0.5, true, null, 0.0));
                 var job = await api.GenerateAsync(req, lifetime.Token);
                 while(true) {
                     await Task.Delay(500, lifetime.Token);
