@@ -1,8 +1,22 @@
-﻿"""Optional scene plan: map numbered SRT cues to images and renderer options."""
+"""Optional scene plan: map numbered SRT cues to images and renderer options."""
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+
+
+def discover_layers(image: Path) -> list[Path]:
+    """Optional layers/<image-stem>/*.png, ordered by numeric filename."""
+    folder = image.parent / "layers" / image.stem
+    if not folder.is_dir():
+        return []
+    candidates = [p for p in folder.iterdir()
+                  if p.is_file() and p.suffix.lower() == ".png"]
+    def numeric_key(path: Path):
+        return [int(chunk) if chunk.isdigit() else chunk.lower()
+                for chunk in re.split(r"(\d+)", path.name)]
+    return sorted(candidates, key=numeric_key)
 
 
 def make_template(images: list[Path], cue_count: int, boundaries) -> dict:
@@ -19,6 +33,8 @@ def make_template(images: list[Path], cue_count: int, boundaries) -> dict:
             "block_sequence": [],
             "preset": "classic",
             "lineart": "",
+            "layers": [str(p.relative_to(image.parent)).replace("\\", "/")
+                       for p in discover_layers(image)],
         })
     return {
         "_help": "cue_from/cue_to are inclusive 1-based SRT indices. "
@@ -66,6 +82,21 @@ def load_plan(path: Path, images_dir: Path, cue_count: int,
         preset = spec.get("preset", "classic")
         if preset not in ("classic", "block-speedpaint"):
             raise ValueError(f"Scene {index}: invalid preset")
+        raw_layers = spec.get("layers", [])
+        if not isinstance(raw_layers, list) or len(raw_layers) > 12:
+            raise ValueError(f"Scene {index}: layers must be a list of up to 12 PNG files")
+        layer_paths = []
+        for raw in raw_layers:
+            if not isinstance(raw, str) or not raw:
+                raise ValueError(f"Scene {index}: each layer must be a PNG filename")
+            layer = (images_dir / raw).resolve()
+            try:
+                layer.relative_to(images_dir.resolve())
+            except ValueError as e:
+                raise ValueError(f"Scene {index}: layer outside selected folder") from e
+            if layer.suffix.lower() != ".png" or not layer.is_file():
+                raise ValueError(f"Scene {index}: invalid transparent PNG layer: {raw}")
+            layer_paths.append(str(layer))
         lineart_name = spec.get("lineart", "")
         lineart = None
         if lineart_name:
@@ -90,6 +121,7 @@ def load_plan(path: Path, images_dir: Path, cue_count: int,
             "draw_blocks": blocks, "block_order": order,
             "block_sequence": sequence, "preset": preset,
             "lineart": str(lineart) if lineart else "",
+            "layers": layer_paths,
         })
     if expected != cue_count + 1:
         raise ValueError(f"Scene plan ends at cue {expected - 1} but SRT has {cue_count} cues")

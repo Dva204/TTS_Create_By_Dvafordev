@@ -75,3 +75,58 @@ bằng chuột và chưa có AI nhận diện/thứ tự vẽ các đối tượ
 Môi trường renderer nằm ở D:\TestTTS\_whiteboard_engine_lab, độc lập với
 backend TTS. Những thay đổi Git chưa commit của người dùng được giữ nguyên.
 
+
+## V0.4 — Vẽ lần lượt nhiều layer
+
+Tab Whiteboard Batch có 2 nút mới:
+
+- Đề xuất vùng: chọn ảnh trong thư mục ảnh. Ứng dụng tạo
+  images/layers/<tên ảnh>/regions.json và regions_preview.jpg.
+  Mở preview để kiểm tra các vùng được đánh số, sửa toạ độ/thứ tự trong
+  regions.json nếu cần.
+- Tạo PNG layer: đọc regions.json và xuất layer PNG trong suốt ở
+  images/layers/<tên ảnh>/01_object_01.png, 02_object_02.png...
+  Nếu đã có PNG trùng tên, ứng dụng hỏi trước khi ghi đè.
+
+Sau đó render bình thường. Tool tự tìm các PNG layer trong
+images/layers/<tên ảnh>/, vẽ theo thứ tự tên file, giữ lại các đối tượng
+đã vẽ khi chuyển sang layer mới.
+
+Ví dụ thư mục:
+    images/
+      001.png
+      002.png
+      layers/
+        001/
+          regions.json
+          regions_preview.jpg
+          01_character.png
+          02_timeline.png
+        002/
+          01_map.png
+          02_event.png
+
+Nếu dùng JSON scene plan thì trường layers có thể chứa:
+    "layers": ["layers/001/01_character.png", "layers/001/02_timeline.png"]
+
+Lưu ý: khi xuất layer mới bằng giao diện, scene plan cũ được bỏ chọn
+để tool tự nhận diện các thư mục layer. Nếu cần điều chỉnh số câu SRT
+thủ công, hãy tạo lại JSON mẫu sau khi xuất layer.
+
+Giới hạn kỹ thuật: Đề xuất vùng là thuật toán phân nhóm điểm ảnh trên
+nền trắng, không phải AI hiểu vật thể. Tranh phức tạp, background màu,
+đối tượng chồng lấn dễ cho kết quả sai; cần chỉnh tay hoặc dùng PNG layer
+đã tách từ công cụ khác. Tất cả PNG layer phải có cùng kích thước canvas
+với ảnh nguồn. Tool tự co đều toàn bộ canvas lúc dựng preview.
+
+Kiểm thử:
+- 8 giây, 2 layer nhân vật rồi timeline, H.264/AAC: đạt.
+- 640x360 nguồn -> vẽ 320x180 -> xuất 640x360 bằng NVENC: đạt.
+- Ảnh phẳng nền trắng -> đề xuất 2 vùng -> PNG layer -> video: đạt.
+- Đã sửa lỗi tràn số khi tính alpha làm mất chi tiết tối.
+- Chưa test giao diện bằng chuột và chưa render video 8-12 phút với TTS thật.
+
+Git: feature/whiteboard-ai-local, main không nhận commit Whiteboard.
+Renderer upstream được cài riêng, script dựng lại môi trường nằm tại
+whiteboard_tools/setup_renderer.ps1. Yêu cầu Git, Python 3.13, FFmpeg.
+

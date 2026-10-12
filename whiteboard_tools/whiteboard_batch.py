@@ -17,7 +17,8 @@ import sys
 from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageOps, ImageEnhance, ImageChops
-from scene_plan import load_plan, make_template
+from scene_plan import load_plan, make_template, discover_layers
+from layer_render import render_layered_scene, COMPOSITOR_VERSION
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".svg"}
 RASTER_EXT = IMAGE_EXT - {".svg"}
@@ -169,6 +170,9 @@ def render(args) -> None:
     if args.scene_plan:
         scenes = load_plan(Path(args.scene_plan), images_dir, len(cues),
                            cues, total, IMAGE_EXT)
+    else:
+        for scene, img in zip(scenes, images):
+            scene["layers"] = [str(p.resolve()) for p in discover_layers(img)]
     out.parent.mkdir(parents=True, exist_ok=True)
     work = out.parent / (out.stem + ".whiteboard_work")
     work.mkdir(parents=True, exist_ok=True)
@@ -183,12 +187,17 @@ def render(args) -> None:
         preset = scene.get("preset", args.preset)
         fill_style = "fade" if preset == "classic" else args.color_fill
         color_seconds = max(0.65, min(2.5, scene["duration"] * 0.30))
+        layers = scene.get("layers", [])
         parts = [str(img.resolve()), str(img.stat().st_size), str(img.stat().st_mtime_ns),
                  f"{scene['duration']:.5f}", str(args.width), str(args.height),
                  str(args.fps), preset, args.hand, fill_style, str(color_seconds),
                  args.lineart_mode, str(scene.get("draw_blocks", args.draw_blocks)),
                  scene.get("block_order", args.block_order),
-                 json.dumps(scene.get("block_sequence", []))]
+                 json.dumps(scene.get("block_sequence", [])), COMPOSITOR_VERSION]
+        for asset in layers:
+            layer_path = Path(asset)
+            parts += [str(layer_path), str(layer_path.stat().st_size),
+                      str(layer_path.stat().st_mtime_ns)]
         override = scene.get("lineart", "")
         if override:
             lp = Path(override)
@@ -198,6 +207,18 @@ def render(args) -> None:
         if not (clip.exists() and old_hash.exists()
                 and old_hash.read_text(encoding="ascii") == fingerprint
                 and duration_of(clip) > 0.1):
+            if layers:
+                print(f"[SCENE {n}/{len(scenes)}] {len(layers)} ordered layers, {scene['duration']:.2f}s", flush=True)
+                render_layered_scene(
+                    layers=layers, scene_seconds=scene["duration"],
+                    scene_dir=scene_dir, output=clip, engine=engine,
+                    width=args.width, height=args.height,
+                    fps=args.fps, hand=args.hand,
+                    prepare_raster=prepare_raster,
+                    source_canvas=img)
+                old_hash.write_text(fingerprint, encoding="ascii")
+                segment_list.append(clip)
+                continue
             source = None
             if img.suffix.lower() in RASTER_EXT:
                 lineart, source = prepare_raster(img, scene_dir, args.width,

@@ -146,6 +146,10 @@ public partial class Form1
         };
         layout.Controls.Add(log, 0, 12);
         layout.SetColumnSpan(log, 3);
+        var suggestRegions = new Button { Text = "Đề xuất vùng", Dock = DockStyle.Fill };
+        var exportLayers = new Button { Text = "Tạo PNG layer", Dock = DockStyle.Fill };
+        layout.Controls.Add(suggestRegions, 0, 10);
+        layout.Controls.Add(exportLayers, 0, 11);
 
         Process? running = null;
         void Append(string line)
@@ -184,6 +188,115 @@ public partial class Form1
             };
             return candidates.FirstOrDefault(File.Exists);
         }
+
+        string? selectedRegionImage = null;
+
+        async Task<bool> ProcessRegionImageAsync(string inputFile, bool apply, bool overwrite)
+        {
+            var script = ScriptPath();
+            if (script is null || !File.Exists(engine.Text))
+            {
+                MessageBox.Show(this, "Không tìm thấy script hoặc môi trường Whiteboard.");
+                return false;
+            }
+            var extractor = Path.Combine(Path.GetDirectoryName(script)!, "extract_layers.py");
+            var python = Path.Combine(Path.GetDirectoryName(engine.Text)!, "python.exe");
+            if (!File.Exists(extractor) || !File.Exists(python))
+            {
+                MessageBox.Show(this, "Không tìm thấy extract_layers.py hoặc Python renderer.");
+                return false;
+            }
+            var imageName = Path.GetFileNameWithoutExtension(inputFile);
+            var layerFolder = Path.Combine(images.Text, "layers", imageName);
+            var psi = new ProcessStartInfo(python) {
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
+            };
+            foreach (var arg in new [] { extractor, "--image", inputFile,
+                                         "--output-dir", layerFolder })
+                psi.ArgumentList.Add(arg);
+            if (apply) psi.ArgumentList.Add("--apply");
+            if (overwrite) psi.ArgumentList.Add("--force");
+            using var process = Process.Start(psi)
+                                ?? throw new InvalidOperationException("Không thể mở Python.");
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            Append(await outputTask);
+            Append(await errorTask);
+            if (process.ExitCode != 0) {
+                MessageBox.Show(this, "Tách layer không thành công. Xem log để biết lý do.");
+                return false;
+            }
+            if (!apply)
+            {
+                var preview = Path.Combine(layerFolder, "regions_preview.jpg");
+                var json = Path.Combine(layerFolder, "regions.json");
+                if (File.Exists(preview)) Process.Start(new ProcessStartInfo(preview) { UseShellExecute = true });
+                if (File.Exists(json)) Process.Start(new ProcessStartInfo("notepad.exe", json) { UseShellExecute = true });
+            }
+            else
+            {
+                // A previously created scene JSON may still have layers=[].
+                // Prefer automatic layer discovery after exporting.
+                scenePlan.Clear();
+                status.Text = "Đã tạo layer. JSON cảnh được bỏ chọn để tự nhận diện layer mới.";
+            }
+            return true;
+        }
+
+        suggestRegions.Click += async (_, _) =>
+        {
+            if (!Directory.Exists(images.Text))
+            {
+                MessageBox.Show(this, "Hãy chọn thư mục ảnh trước.");
+                return;
+            }
+            using var picker = new OpenFileDialog {
+                InitialDirectory = images.Text,
+                Filter = "Ảnh minh họa|*.png;*.jpg;*.jpeg;*.webp;*.bmp"
+            };
+            if (picker.ShowDialog(this) != DialogResult.OK) return;
+            if (!Path.GetFullPath(Path.GetDirectoryName(picker.FileName)!)
+                      .Equals(Path.GetFullPath(images.Text).TrimEnd(Path.DirectorySeparatorChar),
+                              StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(this, "Ảnh phải nằm trực tiếp trong thư mục ảnh đang chọn.");
+                return;
+            }
+            selectedRegionImage = picker.FileName;
+            suggestRegions.Enabled = false;
+            try { await ProcessRegionImageAsync(selectedRegionImage, false, false); }
+            catch (Exception ex) { Append("[ERROR] " + ex); MessageBox.Show(this, ex.Message); }
+            finally { suggestRegions.Enabled = true; }
+        };
+
+        exportLayers.Click += async (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(selectedRegionImage))
+            {
+                MessageBox.Show(this, "Hãy bấm Đề xuất vùng và chọn ảnh trước.");
+                return;
+            }
+            var target = Path.Combine(images.Text, "layers",
+                                      Path.GetFileNameWithoutExtension(selectedRegionImage));
+            if (!File.Exists(Path.Combine(target, "regions.json")))
+            {
+                MessageBox.Show(this, "Chưa có regions.json để xuất layer.");
+                return;
+            }
+            bool overwrite = Directory.Exists(target) &&
+                             Directory.GetFiles(target, "*.png").Length > 0;
+            if (overwrite && MessageBox.Show(this,
+                "Có layer PNG sẵn. Bạn có muốn ghi đè các file trùng tên?",
+                "Xác nhận ghi đè", MessageBoxButtons.YesNo, MessageBoxIcon.Warning)
+                != DialogResult.Yes) return;
+            exportLayers.Enabled = false;
+            try { await ProcessRegionImageAsync(selectedRegionImage, true, overwrite); }
+            catch (Exception ex) { Append("[ERROR] " + ex); MessageBox.Show(this, ex.Message); }
+            finally { exportLayers.Enabled = true; }
+        };
 
         createPlan.Click += async (_, _) =>
         {
