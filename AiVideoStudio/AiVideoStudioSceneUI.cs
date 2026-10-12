@@ -81,6 +81,9 @@ public sealed partial class AiVideoStudioControl
         isRebuildingStrip = true;
         try
         {
+            // Convert all WebP images in one Pillow invocation rather than a new
+            // Python process for every thumbnail. Original image paths stay intact.
+            WarmPreviewImages(scenes.Select(scene => scene.ImagePath));
             sceneStrip.SuspendLayout();
             foreach (Control existing in sceneStrip.Controls.Cast<Control>().ToArray())
                 existing.Dispose();

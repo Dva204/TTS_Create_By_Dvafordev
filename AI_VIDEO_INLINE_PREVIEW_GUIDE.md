@@ -71,3 +71,33 @@ Bộ ảnh/audio giả lập 40 cảnh đã tạo tại:
 D:\TestTTS\_whiteboard_engine_lab\out\studio_8min_40scenes
 
 Lưu project JSON trước khi đóng ứng dụng để bảo toàn thay đổi ảnh/hiệu ứng.
+
+
+## Sửa lỗi thumbnail WebP (12/10/2026)
+
+Nguyên nhân đã kiểm chứng trên Admin-PC: cả 6 ảnh mẫu trong
+FolderTestTTS/ImageTestFolder có đuôi .webp. Windows GDI+ khi mở
+001.webp bằng Image.FromFile báo "Out of memory" dù ảnh hợp lệ:
+Pillow đọc được ảnh WEBP 1920x1280.
+
+Cách khắc phục:
+
+1. AI Video Studio gọi whiteboard_tools/preview_image_bridge.py qua
+   Python/Pillow của Whiteboard renderer khi gặp ảnh WebP.
+2. Script chuyển nhiều ảnh WebP trong một tiến trình sang PNG
+   thu nhỏ (tối đa 960x540), cache tại:
+   %LOCALAPPDATA%\DvaForDev\TTSStudio\PreviewCache
+3. Timeline và khung xem ảnh nguồn dùng PNG cache; trường ImagePath
+   của scene và pipeline xuất video vẫn dùng ảnh WebP gốc.
+4. File nguồn không bị thay đổi. Khi ảnh bị cập nhật, cache được
+   tạo lại theo kích thước file và thời gian sửa cuối.
+5. Nếu thiếu Python/Pillow của renderer, UI thông báo lỗi. Kiểm tra
+   môi trường Python của Whiteboard Studio.
+6. Sau khi cập nhật mã, đóng ứng dụng đang chạy, mở lại bằng dotnet run
+   rồi tạo lại storyboard hoặc mở lại project.
+   Không cần chuyển WebP thành PNG thủ công.
+
+Kiểm thử: 6/6 ảnh WebP thật chuyển preview PNG và GDI+ mở được;
+WinForms smoke khởi tạo đủ 6 thumbnail, đổi chỗ ảnh không làm lệch
+TTS/SRT, không khóa file ảnh nguồn. Unit test Python kiểm tra cache
+reuse/invalidation. Play/Pause/Seek MP4 vẫn chờ nghiệm thu.

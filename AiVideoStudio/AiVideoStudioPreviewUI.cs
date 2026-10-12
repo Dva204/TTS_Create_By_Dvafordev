@@ -77,7 +77,7 @@ public sealed partial class AiVideoStudioControl
         if (!thumbnailCache.TryGetValue(key, out var entry) || entry.Version != version)
         {
             if (entry.Picture != null) entry.Picture.Dispose();
-            var thumbnail = CreatePreviewBitmap(path, width, height);
+            var thumbnail = CreatePreviewBitmap(ResolveDisplayImage(path), width, height);
             thumbnailCache[key] = (version, thumbnail);
             entry = (version, thumbnail);
         }
@@ -194,7 +194,7 @@ public sealed partial class AiVideoStudioControl
         }
         StopInlinePlayback();
         var old = previewStill.Image;
-        previewStill.Image = CreatePreviewBitmap(scene.ImagePath, 600, 338);
+        previewStill.Image = CreatePreviewBitmap(ResolveDisplayImage(scene.ImagePath), 600, 338);
         old?.Dispose();
         previewStill.Visible = true;
         previewStill.BringToFront();
