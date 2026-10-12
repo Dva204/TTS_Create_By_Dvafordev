@@ -135,3 +135,29 @@ Lưu ý: Mức 2 đã có luồng tích hợp với model nhưng chỉ mới th�
 giả lập. Chưa được khẳng định model thật chọn hiệu ứng chính xác, không có
 trợ lý AI nào tự ý tải mô hình lớn hoặc dùng API trả phí trên laptop.
 Hướng dẫn: AI_VIDEO_DIRECTOR_LEVEL2_GUIDE.md.
+
+
+## 9. V1.3 — Scene Manager + TTS tổng (ưu tiên mới)
+
+Quyết định sản phẩm: một audio TTS tổng + một SRT + nhiều ảnh.
+AI Director Mức 1/2 vẫn trong mã nguồn nhưng ẩn khỏi luồng chính;
+không yêu cầu mô hình AI hoặc API để dựng video.
+
+- [x] Chế độ ghép đúng số scene theo số ảnh, phân SRT theo thời lượng.
+- [x] Mode khác: tạo scene bằng số câu SRT mỗi cảnh.
+- [x] Thanh timeline WinForms chọn cảnh, hiển thị thời lượng.
+- [x] Sửa ranh giới hai cảnh liên tiếp bằng cách chuyển 1 câu SRT.
+- [x] Chọn hiệu ứng scene, đường dẫn ảnh và chuyển cảnh cut / fade.
+- [x] Preview một scene với đúng lát audio lấy từ TTS tổng.
+- [x] Render video dài từ audio TTS tổng không nối/cắt audio thủ công.
+- [x] Round số frame theo timestamp toàn video giảm cộng dồn sai số.
+- [x] Cache video từng scene và cache đầu ra cuối nếu không thay đổi.
+- [x] Kiểm thử smoke 80 cue/40 ảnh, tổng 10 phút trong dịch vụ C#.
+- [x] Render thử 40 cảnh Image Story + audio tổng 8 phút (480.000s/9600frames).
+- [x] Render riêng scene số 23, 12 giây từ audio tổng.
+- [ ] Kiểm thử UI bằng chuột trên máy người dùng.
+- [ ] Render 8–12 phút với audio TTS giọng người thật, phân cảnh phức tạp.
+- [ ] Timeline kéo-thả nhiều track (nâng cấp tương lai).
+- [ ] Map/Timeline/Infographic engine riêng (hiện chưa hoàn thiện).
+
+Tài liệu: AI_VIDEO_SCENE_WORKFLOW_GUIDE.md.

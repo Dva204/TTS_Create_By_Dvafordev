@@ -33,6 +33,8 @@ public sealed class AiVideoScene
     public long StartMs { get; set; }
     public long EndMs { get; set; }
     public string StyleId { get; set; } = "whiteboard";
+    // "cut" or a brief fade from white at the start of this scene.
+    public string Transition { get; set; } = "fade";
     public string ImagePath { get; set; } = "";
     public string Narration { get; set; } = "";
     public string Notes { get; set; } = "";
@@ -111,19 +113,111 @@ public static class AiVideoProjectService
         + ((long)int.Parse(match.Groups[key + "s"].Value, CultureInfo.InvariantCulture) * 1000)
         + int.Parse(match.Groups[key + "ms"].Value, CultureInfo.InvariantCulture);
 
+    public static string[] FindStoryboardImages(string? folder)
+    {
+        if (!Directory.Exists(folder)) return Array.Empty<string>();
+        return Directory.EnumerateFiles(folder!)
+            .Where(f => new[] { ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".svg" }
+                .Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+            .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// One illustration per scene, partitioning whole SRT cues into groups
+    /// nearest to equally spaced narration time. Never cuts inside a cue.
+    /// </summary>
+    public static List<AiVideoScene> GenerateByImageCount(
+        IReadOnlyList<AiSubtitleCue> cues, string imageFolder, string styleId = "image-motion")
+    {
+        var images = FindStoryboardImages(imageFolder);
+        if (images.Length == 0)
+            throw new InvalidDataException("Image folder has no usable illustration files.");
+        if (images.Length > cues.Count)
+            throw new InvalidDataException(
+                $"There are {images.Length} images but only {cues.Count} SRT cues. " +
+                "One image per scene requires at least one SRT cue per image.");
+        if (images.Length > 200)
+            throw new InvalidDataException("Preview supports at most 200 scenes per project.");
+        if (!SupportedStyles.Contains(styleId))
+            throw new InvalidDataException("Unsupported scene style.");
+        if (cues.Count == 0) throw new InvalidDataException("The SRT file is empty.");
+        long totalMs = cues[^1].EndMs;
+        var boundaries = new List<int> { 0 };
+        for (int group = 1; group < images.Length; group++)
+        {
+            int low = boundaries[^1] + 1;
+            int high = cues.Count - (images.Length - group);
+            double target = totalMs * ((double)group / images.Length);
+            int nearest = low;
+            for (int k = low + 1; k <= high; k++)
+            {
+                if (Math.Abs(cues[k].StartMs - target) < Math.Abs(cues[nearest].StartMs - target))
+                    nearest = k;
+            }
+            boundaries.Add(nearest);
+        }
+        boundaries.Add(cues.Count);
+        var scenes = new List<AiVideoScene>();
+        for (int i = 0; i < images.Length; i++)
+        {
+            int first = boundaries[i], last = boundaries[i + 1] - 1;
+            scenes.Add(new AiVideoScene {
+                Index = i + 1, CueFrom = first + 1, CueTo = last + 1,
+                StartMs = i == 0 ? 0 : cues[first].StartMs,
+                EndMs = last + 1 < cues.Count ? cues[last + 1].StartMs : cues[last].EndMs,
+                StyleId = styleId, ImagePath = images[i],
+                Narration = string.Join(" ", cues.Skip(first).Take(last - first + 1)
+                    .Select(c => c.Text))
+            });
+        }
+        ValidateScenes(scenes);
+        return scenes;
+    }
+
+    /// <summary>
+    /// Moves one whole SRT cue across the border of two adjacent scenes.
+    /// Negative direction moves one cue from scene to following scene;
+    /// positive direction moves from following scene to this scene.
+    /// </summary>
+    public static void ShiftCueBoundary(IList<AiVideoScene> scenes,
+        IReadOnlyList<AiSubtitleCue> cues, int index, int direction)
+    {
+        if (index < 0 || index >= scenes.Count - 1)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        if (direction != 1 && direction != -1)
+            throw new ArgumentOutOfRangeException(nameof(direction));
+        var left = scenes[index];
+        var right = scenes[index + 1];
+        int newEnd = left.CueTo + direction;
+        if (newEnd < left.CueFrom || newEnd >= right.CueTo)
+            throw new InvalidDataException("Each scene needs at least one SRT cue.");
+        if (newEnd >= cues.Count)
+            throw new InvalidDataException("Cue does not exist in SRT.");
+        long cutTime = cues[newEnd].StartMs;
+        if (cutTime <= left.StartMs || cutTime >= right.EndMs)
+            throw new InvalidDataException("Invalid SRT time boundary.");
+        left.CueTo = newEnd;
+        right.CueFrom = newEnd + 1;
+        left.EndMs = cutTime;
+        right.StartMs = cutTime;
+        left.Narration = string.Join(" ", cues.Skip(left.CueFrom - 1)
+            .Take(left.CueTo - left.CueFrom + 1).Select(c => c.Text));
+        right.Narration = string.Join(" ", cues.Skip(right.CueFrom - 1)
+            .Take(right.CueTo - right.CueFrom + 1).Select(c => c.Text));
+        // Director timings would become invalid when the boundary moves.
+        left.DirectionEvents?.Clear();
+        right.DirectionEvents?.Clear();
+        ValidateScenes(scenes.ToList());
+    }
+
     public static List<AiVideoScene> GenerateStoryboard(
         IReadOnlyList<AiSubtitleCue> cues, int cuesPerScene, string? imageFolder, string styleId = "whiteboard")
     {
         if (cues.Count == 0) throw new ArgumentException("Cần ít nhất một đoạn SRT.", nameof(cues));
         if (cuesPerScene < 1 || cuesPerScene > 20) throw new ArgumentOutOfRangeException(nameof(cuesPerScene));
         if (!SupportedStyles.Contains(styleId)) throw new ArgumentException("Kiểu video chưa được hỗ trợ.", nameof(styleId));
-        var images = Directory.Exists(imageFolder)
-            ? Directory.EnumerateFiles(imageFolder!)
-                .Where(file => new[] { ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".svg" }
-                    .Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
-                .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-            : Array.Empty<string>();
+        var images = FindStoryboardImages(imageFolder);
         var scenes = new List<AiVideoScene>();
         for (int first = 0; first < cues.Count; first += cuesPerScene)
         {
@@ -152,8 +246,9 @@ public static class AiVideoProjectService
         {
             var scene = scenes[i];
             if (scene.Index != i + 1 || scene.CueFrom != expectedCue ||
-                scene.CueTo < scene.CueFrom || scene.StartMs < previousEnd ||
-                scene.EndMs <= scene.StartMs || !SupportedStyles.Contains(scene.StyleId))
+                scene.CueTo < scene.CueFrom || scene.StartMs != previousEnd ||
+                scene.EndMs <= scene.StartMs || !SupportedStyles.Contains(scene.StyleId) ||
+                scene.Transition is not ("fade" or "cut"))
                 throw new InvalidDataException($"Cảnh {i + 1} có mốc SRT/thời gian/kiểu hiệu ứng không hợp lệ.");
             if ((scene.DirectionEvents?.Count ?? 0) > 4)
                 throw new InvalidDataException($"Cảnh {i + 1} có quá nhiều hiệu ứng Director (tối đa 4).");

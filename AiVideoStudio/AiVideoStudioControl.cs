@@ -26,6 +26,9 @@ public sealed partial class AiVideoStudioControl : UserControl
     private readonly TextBox imageFolderInput = new() { Dock = DockStyle.Fill };
     private readonly ComboBox styleInput = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly NumericUpDown cueCount = new() { Minimum = 1, Maximum = 20, Value = 3, Width = 70 };
+    private readonly ComboBox groupingInput = new() {
+        DropDownStyle = ComboBoxStyle.DropDownList, Width = 165
+    };
     private readonly DataGridView storyboardGrid = new() {
         Dock = DockStyle.Fill, ReadOnly = false,
         AllowUserToAddRows = false, AllowUserToDeleteRows = false,
@@ -41,8 +44,9 @@ public sealed partial class AiVideoStudioControl : UserControl
     public AiVideoStudioControl()
     {
         Dock = DockStyle.Fill;
-        var view = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 3, ColumnCount = 1 };
+        var view = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 4, ColumnCount = 1 };
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 290));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
         view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         Controls.Add(view);
@@ -95,9 +99,18 @@ public sealed partial class AiVideoStudioControl : UserControl
         styleInput.DataSource = EffectOptions.Select(a => new StyleOption(a.Id, a.Label)).ToList();
         styleInput.DisplayMember = nameof(StyleOption.Label);
         styleInput.ValueMember = nameof(StyleOption.Id);
-        styleInput.SelectedValue = "whiteboard";
-        options.Controls.Add(new Label { Text = "Câu/cảnh", AutoSize = true, Margin = new Padding(0, 9, 6, 0) });
+        styleInput.SelectedValue = "image-motion";
+        groupingInput.Items.AddRange(new object[] {
+            "Theo số ảnh (khuyên dùng)", "Theo số câu SRT"
+        });
+        groupingInput.SelectedIndex = 0;
+        groupingInput.SelectedIndexChanged += (_, _) => {
+            cueCount.Enabled = groupingInput.SelectedIndex == 1;
+        };
+        options.Controls.Add(groupingInput);
+        options.Controls.Add(new Label { Text = "Câu/cảnh", AutoSize = true, Margin = new Padding(8, 9, 6, 0) });
         options.Controls.Add(cueCount);
+        cueCount.Enabled = false;
         options.Controls.Add(new Label { Text = "Kiểu mặc định", AutoSize = true, Margin = new Padding(10, 9, 6, 0) });
         options.Controls.Add(styleInput);
         inputs.Controls.Add(options, 1, 4);
@@ -123,22 +136,28 @@ public sealed partial class AiVideoStudioControl : UserControl
         openAsset.Click += (_, _) => OpenSelectedImage();
         inputs.Controls.Add(openAsset, 2, 5);
 
-        AddLabel("AI Video Director", 6);
-        var directorBar = new FlowLayoutPanel {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false
+        AddLabel("Quản lý phân cảnh", 6);
+        var sceneButtons = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
         };
-        ConfigureDirectorButtons(directorBar);
-        inputs.Controls.Add(directorBar, 1, 6);
-        inputs.SetColumnSpan(directorBar, 2);
+        ConfigureSceneButtons(sceneButtons);
+        inputs.Controls.Add(sceneButtons, 1, 6);
+        inputs.SetColumnSpan(sceneButtons, 2);
 
         ConfigureGrid();
-        view.Controls.Add(storyboardGrid, 0, 1);
-        view.Controls.Add(status, 0, 2);
+        ConfigureSceneTimeline(view);
+        view.Controls.Add(storyboardGrid, 0, 2);
+        view.Controls.Add(status, 0, 3);
         titleInput.TextChanged += (_, _) => dirty = true;
         audioInput.TextChanged += (_, _) => dirty = true;
         subtitleInput.TextChanged += (_, _) => dirty = true;
         imageFolderInput.TextChanged += (_, _) => dirty = true;
-        storyboardGrid.CellValueChanged += (_, _) => dirty = true;
+        storyboardGrid.CellValueChanged += (_, _) => {
+            dirty = true;
+            RebuildSceneTimeline();
+        };
+        storyboardGrid.SelectionChanged += (_, _) => HighlightSelectedScene();
         storyboardGrid.CurrentCellDirtyStateChanged += (_, _) => {
             if (storyboardGrid.IsCurrentCellDirty)
                 storyboardGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
@@ -186,6 +205,12 @@ public sealed partial class AiVideoStudioControl : UserControl
             FlatStyle = FlatStyle.Flat
         };
         storyboardGrid.Columns.Add(effects);
+        storyboardGrid.Columns.Add(new DataGridViewComboBoxColumn {
+            HeaderText = "Chuyển cảnh",
+            DataPropertyName = nameof(AiVideoScene.Transition),
+            Width = 105, DataSource = new[] { "fade", "cut" },
+            DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton
+        });
         TextColumn("Ảnh minh họa (nhấp đôi để chọn)", nameof(AiVideoScene.ImagePath), 230);
         TextColumn("Director", nameof(AiVideoScene.DirectorSummary), 220, true);
         TextColumn("Lời thuyết minh", nameof(AiVideoScene.Narration), 300, true);
@@ -205,6 +230,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         project = new AiVideoProject();
         scenes = new BindingList<AiVideoScene>();
         storyboardGrid.DataSource = scenes;
+        RebuildSceneTimeline();
         titleInput.Text = project.Title;
         audioInput.Clear(); subtitleInput.Clear(); imageFolderInput.Clear();
         status.Text = "Dự án mới. Import TTS/SRT rồi bấm Tạo storyboard.";
@@ -221,9 +247,12 @@ public sealed partial class AiVideoStudioControl : UserControl
                 return;
             var srt = AiVideoProjectService.ReadSrt(subtitleInput.Text);
             var style = styleInput.SelectedValue?.ToString() ?? "whiteboard";
-            var items = AiVideoProjectService.GenerateStoryboard(srt, (int)cueCount.Value, imageFolderInput.Text, style);
+            var items = groupingInput.SelectedIndex == 0
+                ? AiVideoProjectService.GenerateByImageCount(srt, imageFolderInput.Text, style)
+                : AiVideoProjectService.GenerateStoryboard(srt, (int)cueCount.Value, imageFolderInput.Text, style);
             scenes = new BindingList<AiVideoScene>(items);
             storyboardGrid.DataSource = scenes;
+            RebuildSceneTimeline();
             dirty = true;
             status.Text = $"Đã tạo {scenes.Count} phân cảnh từ {srt.Count} mục SRT. Chỉnh hiệu ứng, ảnh và ghi chú trước khi lưu.";
         }
@@ -280,6 +309,7 @@ public sealed partial class AiVideoStudioControl : UserControl
             project = AiVideoProjectService.Load(picker.FileName);
             scenes = new BindingList<AiVideoScene>(project.Scenes);
             storyboardGrid.DataSource = scenes;
+            RebuildSceneTimeline();
             titleInput.Text = project.Title;
             audioInput.Text = project.AudioPath;
             subtitleInput.Text = project.SubtitlePath;

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-CURRENT_VERSION = "ai-video-render-v1.2.0"
+CURRENT_VERSION = "ai-video-render-v1.3.1"
 SUPPORTED = {"whiteboard", "layer", "image-motion", "image-story", "text"}
 RESAMPLE = Image.Resampling.LANCZOS
 
@@ -46,12 +46,21 @@ def probe_seconds(path: Path) -> float:
     return float(completed.stdout.strip())
 
 
+def digest_file(path: Path) -> str:
+    """Stream hashing for long TTS audio without loading 100+ MB into RAM."""
+    checksum = hashlib.sha256()
+    with path.open("rb") as reader:
+        for piece in iter(lambda: reader.read(1024 * 1024), b""):
+            checksum.update(piece)
+    return checksum.hexdigest()
+
+
 def resolve(root: Path, name: str) -> Path:
     candidate = Path(name)
     return (candidate if candidate.is_absolute() else root / candidate).resolve()
 
 
-def load_project(path: Path, audio_seconds: float):
+def load_project(path: Path, audio_seconds: float, scene_index: int = 0):
     raw = json.loads(path.read_text(encoding="utf-8-sig"))
     if raw.get("schemaVersion") != 1:
         raise ValueError("Unsupported schemaVersion; expected 1")
@@ -66,7 +75,8 @@ def load_project(path: Path, audio_seconds: float):
         if not isinstance(scene, dict):
             raise ValueError(f"Scene {index}: invalid JSON object")
         style = scene.get("styleId")
-        if style not in SUPPORTED:
+        selected_for_render = not scene_index or scene_index == index
+        if selected_for_render and style not in SUPPORTED:
             raise ValueError(f"Scene {index}: style '{style}' has no renderer yet. "
                              "Choose Whiteboard, Layer, Zoom/Pan, Image Story or Text.")
         start, end = scene.get("startMs"), scene.get("endMs")
@@ -81,20 +91,24 @@ def load_project(path: Path, audio_seconds: float):
             raise ValueError(f"Scene {index}: cueTo invalid")
         image_name = scene.get("imagePath") or ""
         image = resolve(root, image_name) if image_name else None
-        if style != "text" and (not image or not image.is_file()):
+        if selected_for_render and style != "text" and (not image or not image.is_file()):
             raise ValueError(f"Scene {index}: image file missing: {image_name}")
-        if style == "text" and image and not image.is_file():
+        if selected_for_render and style == "text" and image and not image.is_file():
             raise ValueError(f"Scene {index}: optional background image missing")
         if end / 1000 > audio_seconds + 0.4:
             raise ValueError(f"Scene {index}: scene extends beyond audio duration")
         from director_effects import validate_events
         direction = validate_events(scene.get("directionEvents") or [], end - start)
+        transition = scene.get("transition", "fade")
+        if transition not in {"cut", "fade"}:
+            raise ValueError(f"Scene {index}: unsupported transition '{transition}'")
         prepared.append({"index": index, "style": style,
                          "start": start / 1000, "end": end / 1000,
                          "image": image,
                          "text": str(scene.get("narration") or ""),
                          "notes": str(scene.get("notes") or ""),
-                         "directionEvents": direction})
+                         "directionEvents": direction,
+                         "transition": transition})
         expected_cue = cue_to + 1
         last = end
     if audio_seconds - prepared[-1]["end"] > 10:
@@ -262,13 +276,18 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
 
 
 def normalize_clip(raw: Path, destination: Path, width: int,
-                   height: int, fps: int, frames: int):
-    # Normalization gives concat identical codec, dimensions, format & time base.
+                   height: int, fps: int, frames: int, fade_in: bool = False):
+    # All scene clips share codec, dimensions, pixel format and timebase.
+    # A subtle white fade never overlaps two clips or moves SRT audio timing.
+    chain = (f"scale={width}:{height}:flags=lanczos,"
+             f"fps={fps},tpad=stop_mode=clone:stop_duration=2")
+    if fade_in:
+        seconds = min(.28, (frames / fps) * .35)
+        chain += f",fade=t=in:st=0:d={seconds:.3f}:color=white"
+    chain += ",format=yuv420p"
     execute([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-        "-i", str(raw), "-vf",
-        f"scale={width}:{height}:flags=lanczos,"
-        f"fps={fps},tpad=stop_mode=clone:stop_duration=2,format=yuv420p",
+        "-i", str(raw), "-vf", chain,
         "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset",
         "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
         "-video_track_timescale", str(fps * 1000), str(destination)
@@ -278,7 +297,8 @@ def normalize_clip(raw: Path, destination: Path, width: int,
 def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int):
     chunks = [CURRENT_VERSION, scene["style"], str(width), str(height),
               str(fps), str(frames), scene["text"], scene["notes"],
-              json.dumps(scene.get("directionEvents", []), sort_keys=True)]
+              json.dumps(scene.get("directionEvents", []), sort_keys=True),
+              scene.get("transition", "fade")]
     image = scene["image"]
     if image:
         chunks += [str(image), hashlib.sha256(image.read_bytes()).hexdigest()]
@@ -287,6 +307,11 @@ def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int):
             for layer in discover_layers(image):
                 chunks += [str(layer), hashlib.sha256(layer.read_bytes()).hexdigest()]
     return hashlib.sha256("\n".join(chunks).encode("utf-8")).hexdigest()
+
+
+def scene_frame_count(scene: dict, fps: int) -> int:
+    """Round global timeline boundaries to avoid drift across many scenes."""
+    return round(scene["end"] * fps) - round(scene["start"] * fps)
 
 
 def render_project(args):
@@ -298,7 +323,7 @@ def render_project(args):
     if not project.get("audioPath") or not audio.is_file():
         raise ValueError("Choose a valid TTS audio before rendering")
     audio_seconds = probe_seconds(audio)
-    project, scenes = load_project(project_file, audio_seconds)
+    project, scenes = load_project(project_file, audio_seconds, args.scene_index)
     width, height, fps = (640, 360, 20) if args.quality == "preview" else (1280, 720, 24)
     export_w, export_h = (640, 360) if args.quality == "preview" else (1920, 1080)
     output = Path(args.output).resolve()
@@ -306,16 +331,24 @@ def render_project(args):
     workspace = output.parent / (output.stem + ".ai_video_work")
     workspace.mkdir(exist_ok=True)
     engine = Path(args.engine).resolve() if args.engine else Path("missing-whiteboard.exe")
+    if args.scene_index:
+        if args.scene_index < 1 or args.scene_index > len(scenes):
+            raise ValueError(f"Requested scene {args.scene_index} does not exist")
+        work_scenes = [scenes[args.scene_index - 1]]
+    else:
+        work_scenes = scenes
     clips = []
-    for scene in scenes:
+    fingerprints = []
+    for scene in work_scenes:
         idx = scene["index"]
-        frames = round((scene["end"] - scene["start"]) * fps)
+        frames = scene_frame_count(scene, fps)
         if frames < 1:
             raise ValueError(f"Scene {idx} has no video frames")
         folder = workspace / f"scene_{idx:03d}"
         folder.mkdir(exist_ok=True)
         clip, cache = folder / "clip.mp4", folder / "cache.txt"
         fingerprint = digest_scene(scene, width, height, fps, frames)
+        fingerprints.append(fingerprint)
         if (clip.is_file() and cache.is_file() and
                 cache.read_text(encoding="ascii") == fingerprint):
             say(f"[CACHE] {idx}/{len(scenes)} {scene['style']}")
@@ -330,29 +363,59 @@ def render_project(args):
             else:
                 render_motion(scene["image"], raw, width, height, fps, frames,
                               folder, scene["style"] == "image-story")
+            fade = scene["index"] > 1 and scene["transition"] == "fade"
             if scene.get("directionEvents"):
                 from director_effects import apply_direction
                 directed = folder / "director_effects.mp4"
                 apply_direction(raw, directed, scene["directionEvents"],
                                 folder, width, height, fps, frames)
-                normalize_clip(directed, clip, width, height, fps, frames)
+                normalize_clip(directed, clip, width, height, fps, frames, fade_in=fade)
             else:
-                normalize_clip(raw, clip, width, height, fps, frames)
+                normalize_clip(raw, clip, width, height, fps, frames, fade_in=fade)
             cache.write_text(fingerprint, encoding="ascii")
         clips.append(clip)
-    playlist = workspace / "clips.ffconcat"
-    playlist.write_text("ffconcat version 1.0\n" + "".join(
-        "file '" + str(c).replace("\\", "/").replace("'", "'\\''") + "'\n"
-        for c in clips), encoding="utf-8")
-    joined = workspace / "joined.mp4"
-    execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-             "-f", "concat", "-safe", "0", "-i", str(playlist),
-             "-c:v", "copy", "-an", str(joined)], "Join all scenes")
+    # Final-export cache: unchanged scenes and identical source audio do not
+    # need to be concatenated and remuxed again.
+    audio_checksum = digest_file(audio)
+    export_signature = hashlib.sha256(json.dumps({
+        "renderer": CURRENT_VERSION,
+        "audio": audio_checksum, "clips": fingerprints,
+        "quality": args.quality, "width": export_w, "height": export_h,
+        "fps": fps, "sceneIndex": args.scene_index,
+        "duration": audio_seconds,
+    }, sort_keys=True).encode("utf-8")).hexdigest()
+    export_stamp = workspace / "export.signature"
+    manifest = output.with_suffix(".ai-video-manifest.json")
+    if (output.is_file() and output.stat().st_size > 1000
+            and manifest.is_file() and export_stamp.is_file()
+            and export_stamp.read_text(encoding="ascii") == export_signature):
+        say(f"[CACHE] Finished MP4 unchanged: {output}")
+        return
+
+    if args.scene_index:
+        joined = clips[0]
+        selected = work_scenes[0]
+        audio_start = selected["start"]
+        mux_seconds = selected["end"] - selected["start"]
+        # Keep the original TTS audio; trim just the selected sentence range.
+        audio_args = ["-ss", f"{audio_start:.6f}", "-t", f"{mux_seconds:.6f}",
+                      "-i", str(audio)]
+    else:
+        playlist = workspace / "clips.ffconcat"
+        playlist.write_text("ffconcat version 1.0\n" + "".join(
+            "file '" + str(c).replace("\\", "/").replace("'", "'\\''") + "'\n"
+            for c in clips), encoding="utf-8")
+        joined = workspace / "joined.mp4"
+        execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-f", "concat", "-safe", "0", "-i", str(playlist),
+                 "-c:v", "copy", "-an", str(joined)], "Join all scenes")
+        mux_seconds = audio_seconds
+        audio_args = ["-i", str(audio)]
     filters = f"scale={export_w}:{export_h}:flags=lanczos,format=yuv420p"
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-              "-i", str(joined), "-i", str(audio),
+              "-i", str(joined)] + audio_args + [
               "-map", "0:v:0", "-map", "1:a:0"]
-    tail = ["-c:a", "aac", "-b:a", "192k", "-t", f"{audio_seconds:.5f}",
+    tail = ["-c:a", "aac", "-b:a", "192k", "-t", f"{mux_seconds:.5f}",
             "-movflags", "+faststart", str(output)]
     if args.quality == "youtube":
         try:
@@ -366,16 +429,19 @@ def render_project(args):
                     "Export Full HD (CPU)")
     else:
         execute(common + ["-c:v", "copy"] + tail, "Add TTS narration")
-    manifest = output.with_suffix(".ai-video-manifest.json")
     manifest.write_text(json.dumps({
         "renderer": CURRENT_VERSION, "project": str(project_file),
         "output": str(output), "audioSeconds": audio_seconds,
         "width": export_w, "height": export_h, "fps": fps,
+        "selectedScene": args.scene_index or None,
         "scenes": [{"index": s["index"], "style": s["style"],
                     "start": s["start"], "end": s["end"],
-                    "directorEvents": len(s.get("directionEvents", []))} for s in scenes]
+                    "frames": scene_frame_count(s, fps),
+                    "transition": s["transition"],
+                    "directorEvents": len(s.get("directionEvents", []))} for s in work_scenes]
     }, ensure_ascii=False, indent=2), encoding="utf-8")
-    say(f"[DONE] {output} — {len(scenes)} scenes, {audio_seconds:.2f}s")
+    export_stamp.write_text(export_signature, encoding="ascii")
+    say(f"[DONE] {output} - {len(work_scenes)} scenes, {mux_seconds:.2f}s")
 
 
 def main():
@@ -384,6 +450,8 @@ def main():
     parser.add_argument("--output", required=True, help="Output MP4")
     parser.add_argument("--quality", choices=["preview", "youtube"], default="preview")
     parser.add_argument("--engine", default="", help="Existing whiteboard.exe")
+    parser.add_argument("--scene-index", type=int, default=0,
+                        help="Preview only one scene with the matching slice of total TTS")
     args = parser.parse_args()
     try:
         render_project(args)

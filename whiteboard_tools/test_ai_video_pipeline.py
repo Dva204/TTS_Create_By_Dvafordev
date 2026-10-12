@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from PIL import Image
-from ai_video_pipeline import CURRENT_VERSION, SUPPORTED, load_project, digest_scene
+from ai_video_pipeline import CURRENT_VERSION, SUPPORTED, load_project, digest_scene, scene_frame_count
 
 
 class ProjectPipelineTests(unittest.TestCase):
@@ -98,6 +98,32 @@ class ProjectPipelineTests(unittest.TestCase):
              "text": "", "zoom": 1.12, "focusX": 2.5, "focusY": .5}
         ]
         with self.assertRaisesRegex(ValueError, "safe range"):
+            self.parse()
+
+    def test_cumulative_frame_rounding_prevents_drift(self):
+        scenes = [{"start": i * .133, "end": (i+1) * .133}
+                  for i in range(100)]
+        self.assertEqual(sum(scene_frame_count(s, 24) for s in scenes),
+                         round(13.3 * 24))
+
+    def test_transition_changes_cache(self):
+        scene = self.parse()[0]
+        initial = digest_scene(scene, 640, 360, 20, 70)
+        scene["transition"] = "cut"
+        self.assertNotEqual(initial, digest_scene(scene, 640, 360, 20, 70))
+
+    def test_preview_selected_scene_ignores_unfinished_other_scene(self):
+        self.example["scenes"][0]["styleId"] = "map"
+        self.example["scenes"][0]["imagePath"] = "unassigned.png"
+        self.plan.write_text(json.dumps(self.example), encoding="utf-8")
+        scenes = load_project(self.plan, 7.0, scene_index=2)[1]
+        self.assertEqual(scenes[1]["style"], "text")
+        with self.assertRaisesRegex(ValueError, "no renderer yet"):
+            load_project(self.plan, 7.0)
+
+    def test_unknown_transition_rejected(self):
+        self.example["scenes"][1]["transition"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "unsupported transition"):
             self.parse()
 
     def test_cache_fingerprint_changes_with_image_and_text(self):

@@ -19,8 +19,10 @@ public sealed partial class AiVideoStudioControl
     {
         var preview = new Button { Text = "Xem trước MP4", AutoSize = true, Height = 30 };
         var youtube = new Button { Text = "Xuất YouTube", AutoSize = true, Height = 30 };
+        var scenePreview = new Button { Text = "Xem cảnh đã chọn", AutoSize = true, Height = 30 };
         var stop = new Button { Text = "Dừng render", AutoSize = true, Height = 30, Enabled = false };
         panel.Controls.Add(preview);
+        panel.Controls.Add(scenePreview);
         panel.Controls.Add(youtube);
         panel.Controls.Add(stop);
 
@@ -37,7 +39,17 @@ public sealed partial class AiVideoStudioControl
             catch (Exception ex) { status.Text = "Không thể dừng: " + ex.Message; }
         };
         preview.Click += async (_, _) => await RunProjectRenderAsync("preview", preview, youtube, stop);
-        youtube.Click += async (_, _) => await RunProjectRenderAsync("youtube", preview, youtube, stop);
+        youtube.Click += async (_, _) => await RunProjectRenderAsync("youtube", preview, youtube, stop, 0, scenePreview);
+        scenePreview.Click += async (_, _) =>
+        {
+            int selected = storyboardGrid.CurrentRow?.Index ?? -1;
+            if (selected < 0 || selected >= scenes.Count)
+            {
+                MessageBox.Show(this, "Hãy chọn một cảnh trong storyboard trước.");
+                return;
+            }
+            await RunProjectRenderAsync("preview", preview, youtube, stop, selected + 1, scenePreview);
+        };
     }
 
     private static string? RenderScriptPath()
@@ -63,7 +75,8 @@ public sealed partial class AiVideoStudioControl
         catch (InvalidOperationException) { }
     }
 
-    private async Task RunProjectRenderAsync(string quality, Button preview, Button youtube, Button stop)
+    private async Task RunProjectRenderAsync(string quality, Button preview, Button youtube,
+                                               Button stop, int onlyScene = 0, Button? scenePreview = null)
     {
         if (renderProcess is { HasExited: false }) return;
         try
@@ -76,6 +89,7 @@ public sealed partial class AiVideoStudioControl
                 throw new FileNotFoundException("Chưa chọn audio TTS hợp lệ.", project.AudioPath);
             AiVideoProjectService.ValidateScenes(project.Scenes);
             var unavailable = project.Scenes
+                .Where(s => onlyScene == 0 || s.Index == onlyScene)
                 .Where(s => s.StyleId is "map" or "timeline" or "infographic")
                 .Select(s => $"Cảnh {s.Index}: {s.StyleId}").ToArray();
             if (unavailable.Length != 0)
@@ -99,7 +113,8 @@ public sealed partial class AiVideoStudioControl
 
             using var saveDialog = new SaveFileDialog {
                 Filter = "MP4 Video|*.mp4", DefaultExt = "mp4",
-                FileName = quality == "preview" ? "ai_video_preview.mp4" : "ai_video_youtube.mp4",
+                FileName = onlyScene > 0 ? $"scene_{onlyScene:000}_preview.mp4" :
+                    quality == "preview" ? "ai_video_preview.mp4" : "ai_video_youtube.mp4",
                 Title = "Chọn vị trí xuất video AI"
             };
             if (saveDialog.ShowDialog(this) != DialogResult.OK) return;
@@ -127,6 +142,11 @@ public sealed partial class AiVideoStudioControl
                 "--output", destination, "--quality", quality,
                 "--engine", rendererExecutable
             }) psi.ArgumentList.Add(argument);
+            if (onlyScene > 0)
+            {
+                psi.ArgumentList.Add("--scene-index");
+                psi.ArgumentList.Add(onlyScene.ToString());
+            }
 
             using var process = new Process { StartInfo = psi };
             var log = new StringBuilder();
@@ -143,6 +163,7 @@ public sealed partial class AiVideoStudioControl
             renderProcess = process;
             preview.Enabled = false;
             youtube.Enabled = false;
+            if (scenePreview != null) scenePreview.Enabled = false;
             stop.Enabled = true;
             status.Text = "Đang chuẩn bị render " + quality + "...";
             process.OutputDataReceived += (_, e) =>
@@ -158,7 +179,11 @@ public sealed partial class AiVideoStudioControl
             process.BeginErrorReadLine();
             await process.WaitForExitAsync();
             if (process.ExitCode == 0)
+            {
                 status.Text = "Đã xuất video: " + destination;
+                if (onlyScene > 0 && File.Exists(destination))
+                    Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true });
+            }
             else
             {
                 status.Text = "Render đã dừng hoặc lỗi (exit " + process.ExitCode + ").";
@@ -179,6 +204,7 @@ public sealed partial class AiVideoStudioControl
             renderProcess = null;
             preview.Enabled = true;
             youtube.Enabled = true;
+            if (scenePreview != null) scenePreview.Enabled = true;
             stop.Enabled = false;
         }
     }
