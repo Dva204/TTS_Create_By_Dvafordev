@@ -45,8 +45,8 @@ public sealed partial class AiVideoStudioControl : UserControl
     {
         Dock = DockStyle.Fill;
         var view = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 4, ColumnCount = 1 };
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 290));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 174));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 163));
         view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         Controls.Add(view);
@@ -147,15 +147,29 @@ public sealed partial class AiVideoStudioControl : UserControl
 
         ConfigureGrid();
         ConfigureSceneTimeline(view);
-        var workspace = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
-            Margin = new Padding(0)
+        // The previous 58% grid / 42% player split made a 16:9 video tiny
+        // (typically ~180px wide) because its preview region was too shallow.
+        // Drag the splitter to allocate as much area as needed to the movie.
+        var workspace = new SplitContainer {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Horizontal, SplitterWidth = 7,
+            Margin = new Padding(0),
+            BackColor = SystemColors.ControlDark
         };
-        workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
-        workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
-        workspace.Controls.Add(storyboardGrid, 0, 0);
-        ConfigureInlinePreview(workspace);
+        workspace.Panel1.Controls.Add(storyboardGrid);
+        ConfigureInlinePreview(workspace.Panel2);
         view.Controls.Add(workspace, 0, 2);
+        bool initialSplitApplied = false;
+        workspace.SizeChanged += (_, _) =>
+        {
+            if (initialSplitApplied || workspace.Height < 300) return;
+            initialSplitApplied = true;
+            workspace.Panel1MinSize = 100;
+            workspace.Panel2MinSize = 170;
+            int available = workspace.Height - workspace.SplitterWidth;
+            workspace.SplitterDistance = Math.Clamp((int)(available * .38),
+                workspace.Panel1MinSize, available - workspace.Panel2MinSize);
+        };
         view.Controls.Add(status, 0, 3);
         titleInput.TextChanged += (_, _) => dirty = true;
         audioInput.TextChanged += (_, _) => dirty = true;

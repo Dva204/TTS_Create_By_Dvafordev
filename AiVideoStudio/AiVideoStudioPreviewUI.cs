@@ -105,24 +105,59 @@ public sealed partial class AiVideoStudioControl
         else ShowSelectedSceneImage();
     }
 
-    private void ConfigureInlinePreview(TableLayoutPanel workspace)
+    private void ConfigureInlinePreview(Control workspace)
     {
         var outer = new TableLayoutPanel {
             Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Padding(5)
         };
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-        workspace.Controls.Add(outer, 0, 1);
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        workspace.Controls.Add(outer);
 
-        var left = new Panel { Dock = DockStyle.Fill, BackColor = Color.Black };
+        var left = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(0), BackColor = Color.Black
+        };
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
+        left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         outer.Controls.Add(left, 0, 0);
-        left.Controls.Add(previewHost);
-        previewHost.Controls.Add(previewStill);
+
+        var previewToolbar = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, WrapContents = false,
+            BackColor = SystemColors.Control, Padding = new Padding(3, 3, 0, 0)
+        };
+        previewToolbar.Controls.Add(new Label {
+            Text = "Khung hình", AutoSize = true, Margin = new Padding(2, 7, 6, 0)
+        });
+        previewToolbar.Controls.Add(previewRatioPicker);
+        var detach = new Button { Text = "Xem riêng / Phóng to", AutoSize = true };
+        detach.Click += (_, _) => OpenDetachedPreview();
+        previewToolbar.Controls.Add(detach);
+        var focusVideo = new Button {
+            Text = "Ưu tiên video", AutoSize = true
+        };
+        focusVideo.Click += (_, _) => {
+            if (workspace is SplitterPanel splitterPanel &&
+                splitterPanel.Parent is SplitContainer split)
+            {
+                split.Panel1Collapsed = !split.Panel1Collapsed;
+                focusVideo.Text = split.Panel1Collapsed ? "Hiện storyboard" : "Ưu tiên video";
+                UpdatePreviewViewport();
+            }
+        };
+        previewToolbar.Controls.Add(focusVideo);
+        previewToolbar.Controls.Add(new Label {
+            Text = "Tỷ lệ chỉ áp dụng cho khung xem, không đổi file MP4",
+            AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(9, 7, 0, 0)
+        });
+        left.Controls.Add(previewToolbar, 0, 0);
+        left.Controls.Add(previewHost, 0, 1);
         previewHost.Controls.Add(previewHint);
         previewHint.BackColor = Color.FromArgb(245, 245, 245);
         previewHint.ForeColor = Color.DimGray;
         previewHint.Height = 22;
         previewHint.Dock = DockStyle.Bottom;
+        ConfigurePreviewRatioPicker();
 
         var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         info.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
@@ -228,12 +263,14 @@ public sealed partial class AiVideoStudioControl
     {
         if (!File.Exists(video)) return;
         lastPreviewVideo = video;
+        videoFrameSize = ProbeVideoFrameSize(video);
+        UpdatePreviewViewport();
         try
         {
             if (nativePlayer == null)
             {
                 nativePlayer = new NativeVideoPlayer { Dock = DockStyle.Fill };
-                previewHost.Controls.Add(nativePlayer);
+                previewViewport.Controls.Add(nativePlayer);
                 nativePlayer.CreateControl();
             }
             previewStill.Visible = false;
