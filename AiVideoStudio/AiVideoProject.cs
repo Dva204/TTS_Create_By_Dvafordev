@@ -56,6 +56,8 @@ public sealed class AiVideoDirectionEvent
     public double Zoom { get; set; } = 1.10;
     public double FocusX { get; set; } = .5;
     public double FocusY { get; set; } = .5;
+    public string Reason { get; set; } = "";
+    public string Source { get; set; } = "";
 }
 
 public sealed record AiSubtitleCue(int Index, long StartMs, long EndMs, string Text);

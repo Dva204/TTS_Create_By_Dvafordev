@@ -22,6 +22,7 @@ public sealed partial class AiVideoStudioControl
         };
         container.Controls.Add(generate);
         container.Controls.Add(edit);
+        AddLevel2Button(container);
         container.Controls.Add(note);
         generate.Click += async (_, _) => await SuggestDirectorAsync(generate);
         edit.Click += (_, _) => EditDirectorForSelectedScene();
@@ -119,7 +120,7 @@ public sealed partial class AiVideoStudioControl
         var events = new BindingList<AiVideoDirectionEvent>(
             (scene.DirectionEvents ?? new()).Select(e => new AiVideoDirectionEvent {
                 Kind = e.Kind, StartMs = e.StartMs, DurationMs = e.DurationMs,
-                Text = e.Text, Zoom = e.Zoom, FocusX = e.FocusX, FocusY = e.FocusY
+                Text = e.Text, Zoom = e.Zoom, FocusX = e.FocusX, FocusY = e.FocusY, Reason = e.Reason, Source = e.Source
             }).ToList());
 
         using var dialog = new Form {
@@ -161,6 +162,8 @@ public sealed partial class AiVideoStudioControl
         AddCol("Zoom", nameof(AiVideoDirectionEvent.Zoom), 65);
         AddCol("Focus X", nameof(AiVideoDirectionEvent.FocusX), 70);
         AddCol("Focus Y", nameof(AiVideoDirectionEvent.FocusY), 70);
+        AddCol("Lý do AI", nameof(AiVideoDirectionEvent.Reason), 190);
+        AddCol("Nguồn", nameof(AiVideoDirectionEvent.Source), 100);
         grid.DataError += (_, e) => {
             e.ThrowException = false;
             MessageBox.Show(dialog, "Dữ liệu thời gian hoặc zoom chưa đúng định dạng.", "Lỗi nhập");

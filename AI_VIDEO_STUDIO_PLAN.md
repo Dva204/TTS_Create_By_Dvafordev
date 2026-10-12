@@ -111,3 +111,27 @@ Các module phải có thể bị vô hiệu hóa mà không làm hỏng TTS hi�
 Đây là bộ gợi ý quy tắc chạy local, không phải AI VLM. Không khẳng định nó hiểu
 vị trí nhân vật hay quyết định chính xác mọi thời điểm zoom/chèn chữ.
 Tài liệu hướng dẫn: AI_VIDEO_DIRECTOR_GUIDE.md.
+
+
+## 8. Director Mức 2 — AI text + vision (tùy chọn)
+
+- [x] Cho người dùng chọn Ollama local hoặc API chat completions HTTPS.
+- [x] Chỉ gửi dữ liệu khi người dùng chủ động yêu cầu; xác nhận rõ khi dùng
+      API từ xa, không lưu API key vào file project.
+- [x] Gửi SRT cảnh hiện tại, ngữ cảnh cảnh trước/sau và tóm lược đầu/cuối câu
+      chuyện. Có tùy chọn gửi ảnh JPEG thu nhỏ <=768 px cho Vision.
+- [x] Nhận JSON gợi ý text và zoom cùng thời điểm cue, target và lý do.
+- [x] Từ chối caption bịa không có trong SRT, toạ độ/zoom ngoài giới hạn.
+- [x] Quy đổi tâm zoom từ ảnh dọc/ngang sang canvas 16:9; giữ gợi ý sửa tay.
+- [x] Giao diện có nút AI Director Mức 2, thiết lập model, quyền gửi ảnh,
+      nút dừng và chế độ xem/chỉnh từng hiệu ứng trước khi render.
+- [x] Bài kiểm thử giả lập server Ollama (HTTP) -> JSON -> video preview MP4.
+- [ ] Thử thực tế với một mô hình Vision đã cài / tài khoản API đã được kết nối.
+- [ ] Đánh giá sai lệch vùng focus/độ tự nhiên trên 20-40 cảnh lịch sử có thật.
+- [ ] Preview kéo tâm zoom trực tiếp và detector định vị bounding-box.
+- [ ] Kiểm thử Video 8-12 phút và giao diện WinForms bằng chuột.
+
+Lưu ý: Mức 2 đã có luồng tích hợp với model nhưng chỉ mới thử bằng mô hình
+giả lập. Chưa được khẳng định model thật chọn hiệu ứng chính xác, không có
+trợ lý AI nào tự ý tải mô hình lớn hoặc dùng API trả phí trên laptop.
+Hướng dẫn: AI_VIDEO_DIRECTOR_LEVEL2_GUIDE.md.
