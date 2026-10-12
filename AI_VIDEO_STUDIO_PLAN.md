@@ -36,11 +36,11 @@ Các module phải có thể bị vô hiệu hóa mà không làm hỏng TTS hi�
 - [x] Test JSON/SRT/WinForms build, không render AI trong giai đoạn này.
 
 ### V1.1 — Render pipeline thống nhất
-- [ ] Adapter cho Whiteboard và Layer đã hoạt động; import scene config.
-- [ ] Adapter Image Motion/Zoom-Pan/Text trước (nhẹ, FFmpeg).
-- [ ] Giữ timeline SRT, audio khớp từng scene.
-- [ ] Render preview 360p và Full HD nhanh (720p -> 1080p NVENC).
-- [ ] Cache và resume, test dự án ≥8 phút.
+- [x] Adapter Whiteboard/Layer dùng lại engine local, ánh xạ từ project JSON.
+- [x] Adapter Image Motion/ZoomPan, Image Story và Text hoạt họa local.
+- [x] Giữ timeline tạo từ SRT, thêm audio tổng sau khi nối scene.
+- [x] Render preview 360p / Full HD nhanh (720p -> 1080p NVENC).
+- [ ] Cache theo scene đã có; kiểm thử thực tế video ≥8 phút vẫn chưa thực hiện.
 
 ### V1.2 — Đa định dạng animation
 - [ ] Map/Timeline SVG với tọa độ có nguồn xác thực; hỗ trợ từng layer.
@@ -81,3 +81,15 @@ Các module phải có thể bị vô hiệu hóa mà không làm hỏng TTS hi�
 - Test headless: 4 cues -> 2 scene, JSON roundtrip, từ chối SRT và scene lỗi.
 - Chưa có AI tự chọn style và chưa có pipeline render đa engine từ tab này.
 - Lưu ý: đường dẫn tuyệt đối của file media chỉ dùng cục bộ; file JSON ưu tiên lưu đường dẫn tương đối đến vị trí project.
+
+
+## 6. Bản V1.1 (12/10/2026)
+
+- whiteboard_tools/ai_video_pipeline.py: render thống nhất qua project JSON.
+- Hiệu ứng đã chạy thử: whiteboard, layer, image-motion, image-story, text.
+- UI có nút Xem trước MP4, Xuất YouTube, Dừng render; hiển thị lỗi render.
+- Map, Timeline, Infographic chưa có renderer: hiện được đánh dấu sắp có và từ chối render.
+- Test nội bộ: 5 cảnh, tổng 10 giây, xuất preview H.264/AAC 640x360 20 FPS,
+  Full HD NVENC 1920x1080 24 FPS, cả hai đều 10.000 giây.
+- 8 bài test pipeline đạt; chưa test thực tế UI bằng chuột, chưa thử file TTS thật dài.
+- Hướng dẫn: AI_VIDEO_RENDER_GUIDE.md.

@@ -1,0 +1,387 @@
+﻿#!/usr/bin/env python3
+"""Render a schemaVersion=1 AI Video Studio storyboard locally.
+
+Styles implemented in this version: whiteboard, layer, image-motion,
+image-story and text. Other future styles fail explicitly.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+CURRENT_VERSION = "ai-video-render-v1.1.1"
+SUPPORTED = {"whiteboard", "layer", "image-motion", "image-story", "text"}
+RESAMPLE = Image.Resampling.LANCZOS
+
+
+def say(message: str):
+    print(message, flush=True)
+
+
+def execute(command: list[str], description: str):
+    say("[RUN] " + description)
+    completed = subprocess.run(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, encoding="utf-8",
+                               errors="replace")
+    if completed.returncode:
+        raise RuntimeError(f"{description} (exit {completed.returncode}):\n" +
+                           completed.stdout[-4000:])
+
+
+def probe_seconds(path: Path) -> float:
+    completed = subprocess.run([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1", str(path)
+    ], capture_output=True, encoding="utf-8", errors="replace")
+    if completed.returncode or not completed.stdout.strip():
+        raise ValueError("Unable to probe audio/video duration: " + str(path))
+    return float(completed.stdout.strip())
+
+
+def resolve(root: Path, name: str) -> Path:
+    candidate = Path(name)
+    return (candidate if candidate.is_absolute() else root / candidate).resolve()
+
+
+def load_project(path: Path, audio_seconds: float):
+    raw = json.loads(path.read_text(encoding="utf-8-sig"))
+    if raw.get("schemaVersion") != 1:
+        raise ValueError("Unsupported schemaVersion; expected 1")
+    root = path.parent
+    scenes = raw.get("scenes", [])
+    if not isinstance(scenes, list) or not scenes:
+        raise ValueError("Project must have at least one scene")
+    last = 0
+    expected_cue = 1
+    prepared = []
+    for index, scene in enumerate(scenes, 1):
+        if not isinstance(scene, dict):
+            raise ValueError(f"Scene {index}: invalid JSON object")
+        style = scene.get("styleId")
+        if style not in SUPPORTED:
+            raise ValueError(f"Scene {index}: style '{style}' has no renderer yet. "
+                             "Choose Whiteboard, Layer, Zoom/Pan, Image Story or Text.")
+        start, end = scene.get("startMs"), scene.get("endMs")
+        if any(type(v) is not int for v in (start, end)):
+            raise ValueError(f"Scene {index}: startMs/endMs must be integers")
+        if start != last or end <= start:
+            raise ValueError(f"Scene {index}: timeline gap/overlap or invalid duration")
+        if scene.get("index") != index or scene.get("cueFrom") != expected_cue:
+            raise ValueError(f"Scene {index}: invalid scene index/SRT cue order")
+        cue_to = scene.get("cueTo")
+        if type(cue_to) is not int or cue_to < expected_cue:
+            raise ValueError(f"Scene {index}: cueTo invalid")
+        image_name = scene.get("imagePath") or ""
+        image = resolve(root, image_name) if image_name else None
+        if style != "text" and (not image or not image.is_file()):
+            raise ValueError(f"Scene {index}: image file missing: {image_name}")
+        if style == "text" and image and not image.is_file():
+            raise ValueError(f"Scene {index}: optional background image missing")
+        if end / 1000 > audio_seconds + 0.4:
+            raise ValueError(f"Scene {index}: scene extends beyond audio duration")
+        prepared.append({"index": index, "style": style,
+                         "start": start / 1000, "end": end / 1000,
+                         "image": image,
+                         "text": str(scene.get("narration") or ""),
+                         "notes": str(scene.get("notes") or "")})
+        expected_cue = cue_to + 1
+        last = end
+    if audio_seconds - prepared[-1]["end"] > 10:
+        raise ValueError("SRT ends more than 10 seconds before audio; check sync")
+    # Extend final scene to the end of narration (usual trailing silence).
+    prepared[-1]["end"] = audio_seconds
+    return raw, prepared
+
+
+def create_canvas(image_path: Path, destination: Path, width: int, height: int):
+    with Image.open(image_path) as source:
+        base = ImageOps.exif_transpose(source).convert("RGBA")
+        flattened = Image.new("RGBA", base.size, "white")
+        flattened.alpha_composite(base)
+        fitted = ImageOps.contain(flattened.convert("RGB"), (width, height), RESAMPLE)
+    canvas = Image.new("RGB", (width, height), "white")
+    canvas.paste(fitted, ((width - fitted.width) // 2, (height - fitted.height) // 2))
+    canvas.save(destination)
+
+
+def font_at(size: int):
+    for candidate in (
+        Path("C:/Windows/Fonts/segoeuib.ttf"),
+        Path("C:/Windows/Fonts/arialbd.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    ):
+        if candidate.exists():
+            return ImageFont.truetype(str(candidate), size)
+    return ImageFont.load_default()
+
+
+def wrap_text(text: str, d: ImageDraw.ImageDraw, font, max_width: int):
+    result, line = [], ""
+    for word in text.split():
+        trial = word if not line else line + " " + word
+        if line and d.textbbox((0, 0), trial, font=font)[2] > max_width:
+            result.append(line)
+            line = word
+        else:
+            line = trial
+    if line:
+        result.append(line)
+    return result[:8]
+
+
+def render_text(output: Path, text: str, width: int, height: int,
+                fps: int, frames: int, background: Path | None):
+    base = Image.new("RGB", (width, height), "white")
+    if background:
+        bg = output.parent / "text_background.png"
+        create_canvas(background, bg, width, height)
+        base = Image.open(bg).convert("RGB")
+    font = font_at(max(18, min(45, width // 16)))
+    draw = ImageDraw.Draw(base)
+    message = " ".join(text.split()).strip() or "Untitled scene"
+    lines = wrap_text(message, draw, font, int(width * .77))
+    visible_text = "\n".join(lines)
+    # A dedicated lower-third paper card keeps typography legible over
+    # colorful illustrations instead of crossing existing drawn objects.
+    count = len(visible_text)
+    duration_typing = max(1, int(frames * .65))
+    line_height = max(24, int(font.size * 1.43))
+    panel_y1 = max(8, int(height * .52))
+    panel_y2 = min(height - 8, max(int(height * .84),
+                                   panel_y1 + 30 + line_height * len(lines)))
+    start_at_y = panel_y1 + max(6, (panel_y2 - panel_y1 -
+                        line_height * len(lines)) // 2)
+    command = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "rawvideo", "-pixel_format", "rgb24", "-video_size",
+        f"{width}x{height}", "-framerate", str(fps), "-i", "-",
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-pix_fmt", "yuv420p", str(output)
+    ]
+    proc = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        assert proc.stdin is not None
+        for frame in range(frames):
+            snapshot = base.copy()
+            pen = ImageDraw.Draw(snapshot)
+            pen.rounded_rectangle(
+                (int(width * .075), panel_y1, int(width * .925), panel_y2),
+                radius=max(6, width // 70), fill=(251, 250, 247),
+                outline=(63, 78, 95), width=max(1, width // 300))
+            progress = min(count, round(count * frame / duration_typing))
+            shown = visible_text[:progress]
+            for row, part in enumerate(shown.split("\n")):
+                pen.text((int(width * .115), start_at_y + row * line_height),
+                         part, fill=(24, 37, 53), font=font)
+            proc.stdin.write(snapshot.tobytes())
+        proc.stdin.close()
+        errors = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
+        code = proc.wait()
+        if code:
+            raise RuntimeError("Text rendering failed: " + errors[-3000:])
+    except BaseException:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        raise
+
+
+def render_motion(image: Path, output: Path, width: int, height: int,
+                  fps: int, frames: int, folder: Path, static: bool):
+    prepared = folder / "prepared.png"
+    create_canvas(image, prepared, width, height)
+    if static:
+        filters = f"fps={fps},format=yuv420p"
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+               "-loop", "1", "-framerate", str(fps), "-i", str(prepared),
+               "-vf", filters, "-frames:v", str(frames), "-an",
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+               "-pix_fmt", "yuv420p", str(output)]
+    else:
+        # Zoom by no more than 12%; always focus the center to prevent black edges.
+        step = .12 / max(1, frames)
+        vf = (f"zoompan=z='min(zoom+{step:.8f},1.12)':"
+              "x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':"
+              f"d={frames}:s={width}x{height}:fps={fps},format=yuv420p")
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+               "-i", str(prepared), "-vf", vf, "-frames:v", str(frames),
+               "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+               "-pix_fmt", "yuv420p", str(output)]
+    execute(cmd, "Image motion / story")
+
+
+def render_whiteboard(scene: dict, output: Path, folder: Path,
+                      width: int, height: int, fps: int, engine: Path,
+                      python_folder: Path):
+    if not engine.is_file():
+        raise ValueError("Whiteboard engine not found: " + str(engine))
+    from whiteboard_batch import prepare_raster
+    from scene_plan import discover_layers
+    from layer_render import render_layered_scene
+    image = scene["image"]
+    assert image
+    layers = [str(p.resolve()) for p in discover_layers(image)]
+    if scene["style"] == "layer" and layers:
+        render_layered_scene(layers=layers,
+                             scene_seconds=scene["end"] - scene["start"],
+                             scene_dir=folder, output=output, engine=engine,
+                             width=width, height=height, fps=fps, hand="asian",
+                             prepare_raster=prepare_raster, source_canvas=image)
+        return
+    # A missing layer collection is an error, not a silent downgrade.
+    if scene["style"] == "layer":
+        raise ValueError("Layer style requires transparent PNGs under images/layers/<image stem>/")
+    from PIL import UnidentifiedImageError
+    source_image = None
+    if image.suffix.lower() == ".svg":
+        strokes = image
+    else:
+        strokes, source_image = prepare_raster(image, folder, width, height, "edges")
+    length = scene["end"] - scene["start"]
+    tail = max(.35, min(2.2, length * .3))
+    cmd = [str(engine), "render-image", str(strokes),
+           "-o", str(output), "--duration", f"{length:.6f}",
+           "--width", str(width), "--height", str(height),
+           "--fps", str(fps), "--hand", "asian", "--animation-preset",
+           "classic", "--color-fill", "fade",
+           "--tail-color", f"{tail:.3f}"]
+    if source_image:
+        cmd += ["--source-image", str(source_image), "--source-fit", "exact"]
+    execute(cmd, "Whiteboard scene")
+
+
+def normalize_clip(raw: Path, destination: Path, width: int,
+                   height: int, fps: int, frames: int):
+    # Normalization gives concat identical codec, dimensions, format & time base.
+    execute([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(raw), "-vf",
+        f"scale={width}:{height}:flags=lanczos,"
+        f"fps={fps},tpad=stop_mode=clone:stop_duration=2,format=yuv420p",
+        "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset",
+        "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+        "-video_track_timescale", str(fps * 1000), str(destination)
+    ], "Normalize scene")
+
+
+def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int):
+    chunks = [CURRENT_VERSION, scene["style"], str(width), str(height),
+              str(fps), str(frames), scene["text"], scene["notes"]]
+    image = scene["image"]
+    if image:
+        chunks += [str(image), hashlib.sha256(image.read_bytes()).hexdigest()]
+        if scene["style"] == "layer":
+            from scene_plan import discover_layers
+            for layer in discover_layers(image):
+                chunks += [str(layer), hashlib.sha256(layer.read_bytes()).hexdigest()]
+    return hashlib.sha256("\n".join(chunks).encode("utf-8")).hexdigest()
+
+
+def render_project(args):
+    project_file = Path(args.project).resolve()
+    if not project_file.is_file():
+        raise FileNotFoundError("Project JSON missing: " + str(project_file))
+    project = json.loads(project_file.read_text(encoding="utf-8-sig"))
+    audio = resolve(project_file.parent, str(project.get("audioPath") or ""))
+    if not project.get("audioPath") or not audio.is_file():
+        raise ValueError("Choose a valid TTS audio before rendering")
+    audio_seconds = probe_seconds(audio)
+    project, scenes = load_project(project_file, audio_seconds)
+    width, height, fps = (640, 360, 20) if args.quality == "preview" else (1280, 720, 24)
+    export_w, export_h = (640, 360) if args.quality == "preview" else (1920, 1080)
+    output = Path(args.output).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    workspace = output.parent / (output.stem + ".ai_video_work")
+    workspace.mkdir(exist_ok=True)
+    engine = Path(args.engine).resolve() if args.engine else Path("missing-whiteboard.exe")
+    clips = []
+    for scene in scenes:
+        idx = scene["index"]
+        frames = round((scene["end"] - scene["start"]) * fps)
+        if frames < 1:
+            raise ValueError(f"Scene {idx} has no video frames")
+        folder = workspace / f"scene_{idx:03d}"
+        folder.mkdir(exist_ok=True)
+        clip, cache = folder / "clip.mp4", folder / "cache.txt"
+        fingerprint = digest_scene(scene, width, height, fps, frames)
+        if (clip.is_file() and cache.is_file() and
+                cache.read_text(encoding="ascii") == fingerprint):
+            say(f"[CACHE] {idx}/{len(scenes)} {scene['style']}")
+        else:
+            raw = folder / "raw.mp4"
+            say(f"[SCENE] {idx}/{len(scenes)} {scene['style']}")
+            if scene["style"] in ("whiteboard", "layer"):
+                render_whiteboard(scene, raw, folder, width, height, fps,
+                                  engine, project_file.parent)
+            elif scene["style"] == "text":
+                render_text(raw, scene["text"], width, height, fps, frames, scene["image"])
+            else:
+                render_motion(scene["image"], raw, width, height, fps, frames,
+                              folder, scene["style"] == "image-story")
+            normalize_clip(raw, clip, width, height, fps, frames)
+            cache.write_text(fingerprint, encoding="ascii")
+        clips.append(clip)
+    playlist = workspace / "clips.ffconcat"
+    playlist.write_text("ffconcat version 1.0\n" + "".join(
+        "file '" + str(c).replace("\\", "/").replace("'", "'\\''") + "'\n"
+        for c in clips), encoding="utf-8")
+    joined = workspace / "joined.mp4"
+    execute(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+             "-f", "concat", "-safe", "0", "-i", str(playlist),
+             "-c:v", "copy", "-an", str(joined)], "Join all scenes")
+    filters = f"scale={export_w}:{export_h}:flags=lanczos,format=yuv420p"
+    common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+              "-i", str(joined), "-i", str(audio),
+              "-map", "0:v:0", "-map", "1:a:0"]
+    tail = ["-c:a", "aac", "-b:a", "192k", "-t", f"{audio_seconds:.5f}",
+            "-movflags", "+faststart", str(output)]
+    if args.quality == "youtube":
+        try:
+            execute(common + ["-vf", filters, "-c:v", "h264_nvenc",
+                              "-preset", "p4", "-cq", "23"] + tail,
+                    "Export Full HD (NVENC)")
+        except RuntimeError:
+            say("[WARN] NVENC unavailable; falling back to libx264")
+            execute(common + ["-vf", filters, "-c:v", "libx264",
+                              "-preset", "veryfast", "-crf", "23"] + tail,
+                    "Export Full HD (CPU)")
+    else:
+        execute(common + ["-c:v", "copy"] + tail, "Add TTS narration")
+    manifest = output.with_suffix(".ai-video-manifest.json")
+    manifest.write_text(json.dumps({
+        "renderer": CURRENT_VERSION, "project": str(project_file),
+        "output": str(output), "audioSeconds": audio_seconds,
+        "width": export_w, "height": export_h, "fps": fps,
+        "scenes": [{"index": s["index"], "style": s["style"],
+                    "start": s["start"], "end": s["end"]} for s in scenes]
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    say(f"[DONE] {output} — {len(scenes)} scenes, {audio_seconds:.2f}s")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Local AI Video Studio multi-engine renderer")
+    parser.add_argument("--project", required=True, help="Saved project.ai-video.json")
+    parser.add_argument("--output", required=True, help="Output MP4")
+    parser.add_argument("--quality", choices=["preview", "youtube"], default="preview")
+    parser.add_argument("--engine", default="", help="Existing whiteboard.exe")
+    args = parser.parse_args()
+    try:
+        render_project(args)
+        return 0
+    except (OSError, ValueError, RuntimeError, KeyError,
+            json.JSONDecodeError) as exc:
+        print("[ERROR] " + str(exc), file=sys.stderr, flush=True)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+

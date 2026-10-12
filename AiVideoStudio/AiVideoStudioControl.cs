@@ -7,15 +7,15 @@ using System.Windows.Forms;
 
 namespace TTS_Create_By_DvaForDev.AiVideoStudio;
 
-public sealed class AiVideoStudioControl : UserControl
+public sealed partial class AiVideoStudioControl : UserControl
 {
     private static readonly (string Id, string Label)[] EffectOptions = {
         ("whiteboard", "Tay vẽ Whiteboard"),
         ("layer", "Hiện lần lượt Layer"),
-        ("map", "Bản đồ"),
-        ("timeline", "Dòng thời gian"),
+        ("map", "Bản đồ (sắp có)"),
+        ("timeline", "Dòng thời gian (sắp có)"),
         ("image-motion", "Ảnh chuyển động Zoom/Pan"),
-        ("infographic", "Sơ đồ & biểu đồ"),
+        ("infographic", "Sơ đồ/biểu đồ (sắp có)"),
         ("text", "Hiệu ứng chữ"),
         ("image-story", "Tranh AI kể chuyện")
     };
@@ -117,6 +117,7 @@ public sealed class AiVideoStudioControl : UserControl
         AddButton("Mở project JSON", OpenProject);
         AddButton("Lưu project", () => SaveProject());
         AddButton("Lưu thành...", () => SaveProject(asNew: true));
+        ConfigureRenderButtons(fileButtons);
         inputs.Controls.Add(fileButtons, 1, 5);
         var openAsset = new Button { Text = "Xem ảnh đã chọn", Dock = DockStyle.Fill };
         openAsset.Click += (_, _) => OpenSelectedImage();
@@ -124,7 +125,7 @@ public sealed class AiVideoStudioControl : UserControl
 
         AddLabel("Trạng thái hỗ trợ", 6);
         inputs.Controls.Add(new Label {
-            Text = "V1.0: lập storyboard, gắn ảnh và lưu JSON. Chưa tự render từ tab mới.",
+            Text = "V1.1: Xuất MP4 bằng Whiteboard, Layer, Zoom/Pan, Image Story và Text.",
             TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill
         }, 1, 6);
         inputs.SetColumnSpan(inputs.GetControlFromPosition(1, 6)!, 2);
