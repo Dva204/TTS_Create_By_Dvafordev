@@ -18,17 +18,18 @@ public sealed partial class AiVideoStudioControl
     private void EditWhiteboardQuality()
     {
         using var popup = new Form {
-            Text = "Whiteboard V2.1-A — Chất lượng tay vẽ",
-            Width = 585, Height = 320, MinimumSize = new Size(555, 285),
+            Text = "Whiteboard V2.1-B — Chất lượng và giữ màu ảnh gốc",
+            Width = 650, Height = 390, MinimumSize = new Size(610, 365),
             StartPosition = FormStartPosition.CenterParent
         };
         var layout = new TableLayoutPanel {
             Dock = DockStyle.Fill, Padding = new Padding(14),
-            ColumnCount = 2, RowCount = 5
+            ColumnCount = 2, RowCount = 6
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
@@ -58,6 +59,16 @@ public sealed partial class AiVideoStudioControl
         layout.Controls.Add(preset, 1, 0);
         Label("Tăng nét (%)", 1);
         layout.Controls.Add(sharpen, 1, 1);
+        var reveal = new ComboBox {
+            Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList
+        };
+        reveal.Items.AddRange(new object[] {
+            "Cổ điển — tô màu mờ dần",
+            "Giữ màu ảnh gốc — reveal theo đường viền"
+        });
+        reveal.SelectedIndex = project.WhiteboardRevealMode == "source-mask" ? 1 : 0;
+        Label("Cách hiện màu", 2);
+        layout.Controls.Add(reveal, 1, 2);
 
         // Preset values are conservative to avoid halos on high-contrast ink.
         preset.SelectedIndexChanged += (_, _) =>
@@ -67,13 +78,14 @@ public sealed partial class AiVideoStudioControl
 
         var info = new Label {
             Dock = DockStyle.Fill,
-            Text = "Chỉ áp dụng khi Xuất YouTube và cảnh dùng Tay vẽ Whiteboard.\n" +
-                   "Preview vẫn chạy ở độ phân giải thấp để xem nhanh.\n" +
-                   "1.5x: dựng nét vẽ 1920×1080 thực sự, thay vì 720p rồi upscale.\n" +
-                   "2.0x: dựng 2560×1440 rồi downscale Lanczos; dùng nhiều CPU/RAM.\n" +
-                   "Công cụ TTS, SRT, ảnh gốc và các project cũ không thay đổi."
+            Text = "Giữ màu ảnh gốc: tay vẽ nét trước, sau đó ảnh gốc hiện dần " +
+                   "qua mask bám đường viền (không tô lại bằng AI).\n" +
+                   "Preview thể hiện kiểu reveal ở độ phân giải thấp; mức 1.5x/2.0x " +
+                   "chỉ áp dụng khi Xuất YouTube.\n" +
+                   "1.5x: dựng nét vẽ Full HD thực sự. 2.0x: dựng 1440p rồi thu về 1080p.\n" +
+                   "Nếu cần giống ảnh gốc nhất, chọn 1.5x và Giữ màu ảnh gốc."
         };
-        layout.Controls.Add(info, 0, 2);
+        layout.Controls.Add(info, 0, 3);
         layout.SetColumnSpan(info, 2);
         var actions = new FlowLayoutPanel {
             Dock = DockStyle.Fill,
@@ -83,7 +95,7 @@ public sealed partial class AiVideoStudioControl
         var cancel = new Button { Text = "Hủy", Width = 80 };
         actions.Controls.Add(accept);
         actions.Controls.Add(cancel);
-        layout.Controls.Add(actions, 0, 3);
+        layout.Controls.Add(actions, 0, 4);
         layout.SetColumnSpan(actions, 2);
         cancel.Click += (_, _) => popup.DialogResult = DialogResult.Cancel;
         accept.Click += (_, _) => {
@@ -98,9 +110,12 @@ public sealed partial class AiVideoStudioControl
                 return;
             project.WhiteboardRenderScale = scale;
             project.WhiteboardSharpenAmount = (double)sharpen.Value / 100.0;
+            project.WhiteboardRevealMode = reveal.SelectedIndex == 1
+                ? "source-mask" : "classic";
             dirty = true;
-            status.Text = $"Whiteboard: {scale:0.0}x, tăng nét {sharpen.Value}% " +
-                          "(chỉ khi Xuất YouTube). Nhấn Lưu project.";
+            status.Text = $"Whiteboard: {scale:0.0}x, tăng nét {sharpen.Value}%, " +
+                          (reveal.SelectedIndex == 1 ? "giữ màu ảnh gốc" : "màu cổ điển") +
+                          ". Nhấn Lưu project.";
             popup.DialogResult = DialogResult.OK;
         };
         popup.ShowDialog(this);

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-CURRENT_VERSION = "ai-video-render-v2.1.0-a1"
+CURRENT_VERSION = "ai-video-render-v2.1.0-b1"
 SUPPORTED = {"whiteboard", "layer", "image-motion", "image-story", "text"}
 RESAMPLE = Image.Resampling.LANCZOS
 
@@ -71,6 +71,9 @@ def load_project(path: Path, audio_seconds: float, scene_index: int = 0):
         raise ValueError("whiteboardRenderScale must be a finite number from 1.0 to 2.0")
     if type(sharp) not in (int, float) or not math.isfinite(sharp) or not 0 <= sharp <= 0.5:
         raise ValueError("whiteboardSharpenAmount must be a finite number from 0.0 to 0.5")
+    reveal_mode = raw.get("whiteboardRevealMode", "classic")
+    if reveal_mode not in ("classic", "source-mask"):
+        raise ValueError("whiteboardRevealMode must be 'classic' or 'source-mask'")
     scenes = raw.get("scenes", [])
     if not isinstance(scenes, list) or not scenes:
         raise ValueError("Project must have at least one scene")
@@ -272,12 +275,22 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
         mode = "detail" if scene.get("whiteboardScale", 1.0) > 1.0 else "edges"
         strokes, source_image = prepare_raster(image, folder, width, height, mode)
     length = scene["end"] - scene["start"]
-    tail = max(.35, min(2.2, length * .3))
+    reveal_mode = scene.get("whiteboardRevealMode", "classic")
+    if reveal_mode == "source-mask":
+        # The engine draws line-art first, then progressively reveals the
+        # original full-color source through a contour-aware pixel mask.
+        # Extend the reveal phase so it is visible instead of a sudden fade.
+        tail = min(3.0, max(.45, length * .42))
+        tail = min(tail, max(.15, length - .3))
+        fill = "contour-wipe"
+    else:
+        tail = max(.35, min(2.2, length * .3))
+        fill = "fade"
     cmd = [str(engine), "render-image", str(strokes),
            "-o", str(output), "--duration", f"{length:.6f}",
            "--width", str(width), "--height", str(height),
            "--fps", str(fps), "--hand", "asian", "--animation-preset",
-           "classic", "--color-fill", "fade",
+           "classic", "--color-fill", fill,
            "--tail-color", f"{tail:.3f}"]
     if scene.get("whiteboardScale", 1.0) > 1.0:
         cmd += ["--stroke-detail", "rich"]
@@ -288,7 +301,7 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
 
 def normalize_clip(raw: Path, destination: Path, width: int,
                    height: int, fps: int, frames: int, fade_in: bool = False,
-                   sharpen: float = 0.0):
+                   sharpen: float = 0.0, crf: int = 23):
     # All scene clips share codec, dimensions, pixel format and timebase.
     # A subtle white fade never overlaps two clips or moves SRT audio timing.
     chain = (f"scale={width}:{height}:flags=lanczos,"
@@ -305,7 +318,7 @@ def normalize_clip(raw: Path, destination: Path, width: int,
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
         "-i", str(raw), "-vf", chain,
         "-frames:v", str(frames), "-an", "-c:v", "libx264", "-preset",
-        "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+        "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
         "-video_track_timescale", str(fps * 1000), str(destination)
     ], "Normalize scene")
 
@@ -316,6 +329,7 @@ def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int,
               str(final_size or (width, height)),
               str(scene.get("whiteboardScale", 1.0)),
               str(scene.get("whiteboardSharpen", 0.0)),
+              scene.get("whiteboardRevealMode", "classic"),
               str(fps), str(frames), scene["text"], scene["notes"],
               json.dumps(scene.get("directionEvents", []), sort_keys=True),
               scene.get("transition", "fade")]
@@ -351,6 +365,7 @@ def render_project(args):
     export_w, export_h = (640, 360) if args.quality == "preview" else (1920, 1080)
     wb_scale = float(project.get("whiteboardRenderScale", 1.0))
     wb_sharpen = float(project.get("whiteboardSharpenAmount", 0.0))
+    wb_reveal = project.get("whiteboardRevealMode", "classic")
     high_fidelity = args.quality == "youtube" and wb_scale > 1.0
     # All cached scene clips need identical dimensions for lossless concat.
     # Only Whiteboard strokes need high-res tracing; other styles render at
@@ -384,6 +399,7 @@ def render_project(args):
         scene_scale = wb_scale if is_hd_wb else 1.0
         scene["whiteboardScale"] = scene_scale
         scene["whiteboardSharpen"] = wb_sharpen if (args.quality == "youtube" and scene["style"] == "whiteboard") else 0.0
+        scene["whiteboardRevealMode"] = wb_reveal if scene["style"] == "whiteboard" else "classic"
         scene_w = int(width * scene_scale)
         scene_h = int(height * scene_scale)
         if frames < 1:
@@ -415,10 +431,12 @@ def render_project(args):
                 apply_direction(raw, directed, scene["directionEvents"],
                                 folder, width, height, fps, frames)
                 normalize_clip(directed, clip, norm_w, norm_h, fps, frames,
-                               fade_in=fade, sharpen=scene["whiteboardSharpen"])
+                               fade_in=fade, sharpen=scene["whiteboardSharpen"],
+                               crf=18 if (is_hd_wb and wb_reveal == "source-mask") else 23)
             else:
                 normalize_clip(raw, clip, norm_w, norm_h, fps, frames,
-                               fade_in=fade, sharpen=scene["whiteboardSharpen"])
+                               fade_in=fade, sharpen=scene["whiteboardSharpen"],
+                               crf=18 if (is_hd_wb and wb_reveal == "source-mask") else 23)
             cache.write_text(fingerprint, encoding="ascii")
         clips.append(clip)
     # Final-export cache: unchanged scenes and identical source audio do not
@@ -432,6 +450,7 @@ def render_project(args):
         "duration": audio_seconds,
         "whiteboardRenderScale": wb_scale,
         "whiteboardSharpenAmount": wb_sharpen,
+        "whiteboardRevealMode": wb_reveal,
         "clipSize": [norm_w, norm_h],
         "tracks": track_signature(project, music, burn_subtitles, subtitle_cues),
     }, sort_keys=True).encode("utf-8")).hexdigest()
@@ -488,15 +507,21 @@ def render_project(args):
             "-movflags", "+faststart", str(pending)]
     try:
         if args.quality == "youtube":
-            try:
-                execute(common + ["-vf", filters, "-c:v", "h264_nvenc",
-                                  "-preset", "p4", "-cq", "23"] + tail,
-                        "Export Full HD (NVENC)", cwd=workspace)
-            except RuntimeError:
-                say("[WARN] NVENC unavailable; falling back to libx264")
-                execute(common + ["-vf", filters, "-c:v", "libx264",
-                                  "-preset", "veryfast", "-crf", "23"] + tail,
-                        "Export Full HD (CPU)", cwd=workspace)
+            if not burn_subtitles and (norm_w, norm_h) == (export_w, export_h):
+                # Clips are already H.264 Full HD, so a second lossy encode
+                # would erase some newly preserved fine detail.
+                execute(common + ["-c:v", "copy"] + tail,
+                        "Mux Full HD without re-encoding the video", cwd=workspace)
+            else:
+                try:
+                    execute(common + ["-vf", filters, "-c:v", "h264_nvenc",
+                                      "-preset", "p4", "-cq", "20"] + tail,
+                            "Export Full HD (NVENC)", cwd=workspace)
+                except RuntimeError:
+                    say("[WARN] NVENC unavailable; falling back to libx264")
+                    execute(common + ["-vf", filters, "-c:v", "libx264",
+                                      "-preset", "veryfast", "-crf", "20"] + tail,
+                            "Export Full HD (CPU)", cwd=workspace)
         elif burn_subtitles:
             execute(common + ["-vf", filters, "-c:v", "libx264",
                               "-preset", "veryfast", "-crf", "23",
@@ -530,6 +555,7 @@ def render_project(args):
         "musicVolume": music_volume if music else None,
         "whiteboardRenderScale": wb_scale,
         "whiteboardSharpenAmount": wb_sharpen,
+        "whiteboardRevealMode": wb_reveal,
         "sceneRenderSize": [width, height],
         "sceneClipSize": [norm_w, norm_h],
         "scenes": [{"index": s["index"], "style": s["style"],

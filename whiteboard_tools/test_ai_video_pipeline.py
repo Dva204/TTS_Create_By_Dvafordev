@@ -2,10 +2,11 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from PIL import Image
-from ai_video_pipeline import CURRENT_VERSION, SUPPORTED, load_project, digest_scene, scene_frame_count
+from ai_video_pipeline import CURRENT_VERSION, SUPPORTED, load_project, digest_scene, scene_frame_count, render_whiteboard
 
 
 class ProjectPipelineTests(unittest.TestCase):
@@ -157,6 +158,55 @@ class ProjectPipelineTests(unittest.TestCase):
         scene["whiteboardSharpen"] = .3
         self.assertNotEqual(native, digest_scene(
             scene, 1920, 1080, 24, 85, final_size=(1920, 1080)))
+
+    def test_reveal_mode_defaults_to_classic(self):
+        self.example["scenes"][0]["styleId"] = "whiteboard"
+        p, scenes = load_project(self.plan_written(), 7.0)
+        self.assertEqual(p.get("whiteboardRevealMode", "classic"), "classic")
+        self.assertEqual(scenes[0]["style"], "whiteboard")
+
+    def plan_written(self):
+        self.plan.write_text(json.dumps(self.example), encoding="utf-8")
+        return self.plan
+
+    def test_bad_reveal_modes_rejected(self):
+        for bad in ("unknown", "contour-wipe", 0, None, False):
+            self.example["whiteboardRevealMode"] = bad
+            with self.assertRaisesRegex(ValueError, "whiteboardRevealMode"):
+                self.parse()
+
+    def test_reveal_mode_changes_render_fingerprint(self):
+        scene = self.parse()[0]
+        scene["whiteboardRevealMode"] = "classic"
+        old = digest_scene(scene, 640, 360, 20, 70)
+        scene["whiteboardRevealMode"] = "source-mask"
+        self.assertNotEqual(old, digest_scene(scene, 640, 360, 20, 70))
+
+    def test_source_mask_selects_contour_engine_and_original_color(self):
+        art = self.root / "lineart.png"
+        color = self.root / "source.png"
+        art.write_bytes(b"test")
+        color.write_bytes(b"test")
+        engine = self.root / "whiteboard.exe"
+        engine.write_bytes(b"test")
+        base = {"index": 1, "style": "whiteboard", "image": self.image,
+                "start": 0.0, "end": 3.5, "whiteboardScale": 1.5}
+        import whiteboard_batch
+        for mode, expected in (("classic", "fade"), ("source-mask", "contour-wipe")):
+            scene = dict(base, whiteboardRevealMode=mode)
+            with patch.object(whiteboard_batch, "prepare_raster", return_value=(art, color)):
+                with patch("ai_video_pipeline.execute") as run:
+                    render_whiteboard(scene, self.root / "unused.mp4",
+                                      self.root, 640, 360, 20, engine, self.root)
+            cmd = run.call_args[0][0]
+            self.assertEqual(cmd[cmd.index("--color-fill") + 1], expected)
+            self.assertEqual(cmd[cmd.index("--source-image") + 1], str(color))
+            self.assertEqual(cmd[cmd.index("--source-fit") + 1], "exact")
+            tail = float(cmd[cmd.index("--tail-color") + 1])
+            if mode == "source-mask":
+                self.assertGreater(tail, 1.4)
+            else:
+                self.assertLess(tail, 1.2)
 
     def test_cache_fingerprint_changes_with_image_and_text(self):
         scene = self.parse()[0]

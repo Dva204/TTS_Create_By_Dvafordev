@@ -28,6 +28,9 @@ public sealed class AiVideoProject
     // 2.0 = native 1440p supersampling followed by Lanczos downsampling.
     public double WhiteboardRenderScale { get; set; } = 1.0;
     public double WhiteboardSharpenAmount { get; set; } = 0.0;
+    // "classic" preserves prior fade; "source-mask" reveals the exact
+    // source color plate through the engine's progressive contour mask.
+    public string WhiteboardRevealMode { get; set; } = "classic";
     public List<AiVideoScene> Scenes { get; set; } = new();
     [JsonIgnore]
     public string FilePath { get; set; } = "";
@@ -291,6 +294,8 @@ public static class AiVideoProjectService
         if (!double.IsFinite(project.WhiteboardSharpenAmount) ||
             project.WhiteboardSharpenAmount < 0 || project.WhiteboardSharpenAmount > 0.5)
             throw new InvalidDataException("Độ nét Whiteboard phải từ 0 đến 0.5.");
+        if (project.WhiteboardRevealMode is not ("classic" or "source-mask"))
+            throw new InvalidDataException("Chế độ màu Whiteboard không được hỗ trợ.");
     }
 
     public static void Save(AiVideoProject project, string targetFile)
