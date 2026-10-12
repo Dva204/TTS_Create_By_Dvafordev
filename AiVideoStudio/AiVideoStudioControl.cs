@@ -51,14 +51,15 @@ public sealed partial class AiVideoStudioControl : UserControl
         Dock = DockStyle.Fill;
         var view = new TableLayoutPanel {
             Dock = DockStyle.Fill, Padding = new Padding(9, 7, 9, 6),
-            RowCount = 4, ColumnCount = 1,
+            RowCount = 5, ColumnCount = 1,
             BackColor = Color.FromArgb(244, 246, 249)
         };
         // Compact the inputs and make the storyboard / player area flexible.
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 235));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 162));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
         view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 205));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         Controls.Add(view);
 
         var inputs = new TableLayoutPanel {
@@ -71,7 +72,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 133));
         for (var i = 0; i < 7; i++)
             inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
-        view.Controls.Add(inputs, 0, 0);
+        view.Controls.Add(inputs, 0, 1);
 
         void AddLabel(string name, int row) =>
             inputs.Controls.Add(new Label { Text = name, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, row);
@@ -199,7 +200,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         // Keep usability on restored, narrow windows as well as maximized displays.
         workspaceSplit.SizeChanged += (_, _) => UpdateStudioLayout();
         workspaceSplit.HandleCreated += (_, _) => UpdateStudioLayout();
-        view.Controls.Add(status, 0, 3);
+        view.Controls.Add(status, 0, 4);
         titleInput.TextChanged += (_, _) => dirty = true;
         audioInput.TextChanged += (_, _) => dirty = true;
         subtitleInput.TextChanged += (_, _) => dirty = true;
@@ -212,6 +213,8 @@ public sealed partial class AiVideoStudioControl : UserControl
         storyboardGrid.SelectionChanged += (_, _) => {
             HighlightSelectedScene();
             UpdateSelectedScenePreview();
+            UpdateCapcutInspector();
+            capcutAudioLane.Invalidate();
         };
         storyboardGrid.CurrentCellDirtyStateChanged += (_, _) => {
             if (storyboardGrid.IsCurrentCellDirty)
@@ -234,6 +237,7 @@ public sealed partial class AiVideoStudioControl : UserControl
                 dirty = true;
             }
         };
+        BuildCapcutShell(view, inputs);
         ResetProject();
         Disposed += (_, _) => ReleaseInlinePreview();
     }

@@ -31,11 +31,12 @@ public sealed partial class AiVideoStudioControl
     private void ConfigureSceneTimeline(TableLayoutPanel view)
     {
         var wrapper = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4
         };
         wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         wrapper.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 29));
         wrapper.BackColor = Color.White;
         timelineSummary.Font = new Font(timelineSummary.Font, FontStyle.Bold);
         timelineSummary.ForeColor = Color.FromArgb(35, 54, 81);
@@ -45,7 +46,9 @@ public sealed partial class AiVideoStudioControl
         wrapper.Controls.Add(timelineSummary, 0, 0);
         wrapper.Controls.Add(sceneStrip, 0, 1);
         wrapper.Controls.Add(trackOverview, 0, 2);
-        view.Controls.Add(wrapper, 0, 1);
+        ConfigureCapcutAudioLane();
+        wrapper.Controls.Add(capcutAudioLane, 0, 3);
+        view.Controls.Add(wrapper, 0, 3);
     }
 
     private void ConfigureSceneButtons(FlowLayoutPanel bar)
@@ -207,8 +210,10 @@ public sealed partial class AiVideoStudioControl
             }
             sceneStrip.ResumeLayout();
             HighlightSelectedScene();
+            capcutAudioLane.Invalidate();
         }
         finally { isRebuildingStrip = false; }
+        UpdateCapcutInspector();
     }
 
     /// <summary>

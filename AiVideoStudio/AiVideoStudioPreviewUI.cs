@@ -184,6 +184,12 @@ public sealed partial class AiVideoStudioControl
             Text = "Ưu tiên video", AutoSize = true
         };
         focusVideo.Click += (_, _) => {
+            if (capcutWorkspace is not null)
+            {
+                ToggleCapcutVideoFocus();
+                focusVideo.Text = capcutFocus ? "Hiện panels" : "Ưu tiên video";
+                return;
+            }
             if (workspace is SplitterPanel splitterPanel &&
                 splitterPanel.Parent is SplitContainer split)
             {
@@ -203,7 +209,7 @@ public sealed partial class AiVideoStudioControl
         previewTranscriptButton = new Button { Text = "Ẩn lời thoại", AutoSize = true };
         previewTranscriptButton.Click += (_, _) => {
             transcriptCollapsed = !transcriptCollapsed;
-            LayoutPreviewPanels(workspaceSplit.Width >= 1180);
+            LayoutPreviewPanels(capcutWorkspace is not null || workspaceSplit.Width >= 1180);
         };
         previewToolbar.Controls.Add(previewTranscriptButton);
         previewToolbar.Controls.Add(new Label {
@@ -246,7 +252,7 @@ public sealed partial class AiVideoStudioControl
         previewNarration.Text = "Chọn một scene trong timeline để xem ảnh.";
         previewHeader.Text = "TRÌNH XEM TRƯỚC / TTS TỔNG";
         previewHint.Text = "Ảnh gốc (không phải clip đã render)";
-        LayoutPreviewPanels(workspaceSplit.Width >= 1180);
+        LayoutPreviewPanels(capcutWorkspace is not null || workspaceSplit.Width >= 1180);
     }
 
     private static Image CreatePreviewBitmap(string? file, int width, int height)
