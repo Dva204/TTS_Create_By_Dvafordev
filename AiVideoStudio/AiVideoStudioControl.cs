@@ -36,26 +36,41 @@ public sealed partial class AiVideoStudioControl : UserControl
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
         AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None
     };
-    private readonly Label status = new() { AutoEllipsis = true, Dock = DockStyle.Fill };
+    private readonly Label status = new() {
+        AutoEllipsis = true, Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(7, 0, 0, 0),
+        BackColor = Color.White, ForeColor = Color.FromArgb(45, 70, 94)
+    };
     private AiVideoProject project = new();
     private BindingList<AiVideoScene> scenes = new();
     private bool dirty;
 
     public AiVideoStudioControl()
     {
+        Font = new Font("Segoe UI", 9.5f, FontStyle.Regular, GraphicsUnit.Point);
         Dock = DockStyle.Fill;
-        var view = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 4, ColumnCount = 1 };
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 163));
+        var view = new TableLayoutPanel {
+            Dock = DockStyle.Fill, Padding = new Padding(9, 7, 9, 6),
+            RowCount = 4, ColumnCount = 1,
+            BackColor = Color.FromArgb(244, 246, 249)
+        };
+        // Compact the inputs and make the storyboard / player area flexible.
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 235));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 162));
         view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         Controls.Add(view);
 
-        var inputs = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 7, AutoScroll = true };
-        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
+        var inputs = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 7,
+            AutoScroll = true, Padding = new Padding(6, 1, 6, 0),
+            BackColor = Color.White
+        };
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 142));
         inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
-        for (var i = 0; i < 7; i++) inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 133));
+        for (var i = 0; i < 7; i++)
+            inputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
         view.Controls.Add(inputs, 0, 0);
 
         void AddLabel(string name, int row) =>
@@ -150,26 +165,40 @@ public sealed partial class AiVideoStudioControl : UserControl
         // The previous 58% grid / 42% player split made a 16:9 video tiny
         // (typically ~180px wide) because its preview region was too shallow.
         // Drag the splitter to allocate as much area as needed to the movie.
-        var workspace = new SplitContainer {
-            Dock = DockStyle.Fill,
-            Orientation = Orientation.Horizontal, SplitterWidth = 7,
-            Margin = new Padding(0),
-            BackColor = SystemColors.ControlDark
+        workspaceSplit = new SplitContainer {
+            Dock = DockStyle.Fill, Orientation = Orientation.Vertical,
+            SplitterWidth = 7, Margin = new Padding(0),
+            BackColor = Color.FromArgb(210, 217, 227),
+            Panel1MinSize = 0, Panel2MinSize = 0
         };
-        workspace.Panel1.Controls.Add(storyboardGrid);
-        ConfigureInlinePreview(workspace.Panel2);
-        view.Controls.Add(workspace, 0, 2);
-        bool initialSplitApplied = false;
-        workspace.SizeChanged += (_, _) =>
-        {
-            if (initialSplitApplied || workspace.Height < 300) return;
-            initialSplitApplied = true;
-            workspace.Panel1MinSize = 100;
-            workspace.Panel2MinSize = 170;
-            int available = workspace.Height - workspace.SplitterWidth;
-            workspace.SplitterDistance = Math.Clamp((int)(available * .38),
-                workspace.Panel1MinSize, available - workspace.Panel2MinSize);
+        var editor = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            BackColor = Color.White, Padding = new Padding(4)
         };
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        editor.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        var editorTitle = new Label {
+            Text = "BẢNG PHÂN CẢNH · CHỈNH SỬA STORYBOARD",
+            Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Font, FontStyle.Bold),
+            ForeColor = Color.FromArgb(34, 55, 84)
+        };
+        var editorHint = new Label {
+            Text = "Chọn cảnh để xem ảnh / lời thoại · Nhấp đôi cột ảnh để thay hình",
+            Dock = DockStyle.Fill, AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.FromArgb(83, 101, 121)
+        };
+        editor.Controls.Add(editorTitle, 0, 0);
+        editor.Controls.Add(storyboardGrid, 0, 1);
+        editor.Controls.Add(editorHint, 0, 2);
+        workspaceSplit.Panel1.Controls.Add(editor);
+        ConfigureInlinePreview(workspaceSplit.Panel2);
+        view.Controls.Add(workspaceSplit, 0, 2);
+        // Keep usability on restored, narrow windows as well as maximized displays.
+        workspaceSplit.SizeChanged += (_, _) => UpdateStudioLayout();
+        workspaceSplit.HandleCreated += (_, _) => UpdateStudioLayout();
         view.Controls.Add(status, 0, 3);
         titleInput.TextChanged += (_, _) => dirty = true;
         audioInput.TextChanged += (_, _) => dirty = true;
@@ -222,13 +251,13 @@ public sealed partial class AiVideoStudioControl : UserControl
         }
 
         TextColumn("#", nameof(AiVideoScene.Index), 40, true);
-        TextColumn("SRT từ", nameof(AiVideoScene.CueFrom), 65, true);
-        TextColumn("Đến", nameof(AiVideoScene.CueTo), 55, true);
-        TextColumn("Bắt đầu (ms)", nameof(AiVideoScene.StartMs), 95, true);
-        TextColumn("Kết thúc (ms)", nameof(AiVideoScene.EndMs), 95, true);
+        TextColumn("SRT từ", nameof(AiVideoScene.CueFrom), 52, true);
+        TextColumn("Đến", nameof(AiVideoScene.CueTo), 47, true);
+        TextColumn("Bắt đầu", nameof(AiVideoScene.StartMs), 82, true);
+        TextColumn("Kết thúc", nameof(AiVideoScene.EndMs), 82, true);
         var effects = new DataGridViewComboBoxColumn {
             HeaderText = "Hiệu ứng", DataPropertyName = nameof(AiVideoScene.StyleId),
-            Width = 185, DataSource = EffectOptions.Select(x => new StyleOption(x.Id, x.Label)).ToList(),
+            Width = 159, DataSource = EffectOptions.Select(x => new StyleOption(x.Id, x.Label)).ToList(),
             DisplayMember = nameof(StyleOption.Label), ValueMember = nameof(StyleOption.Id),
             DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton,
             FlatStyle = FlatStyle.Flat
@@ -237,13 +266,24 @@ public sealed partial class AiVideoStudioControl : UserControl
         storyboardGrid.Columns.Add(new DataGridViewComboBoxColumn {
             HeaderText = "Chuyển cảnh",
             DataPropertyName = nameof(AiVideoScene.Transition),
-            Width = 105, DataSource = new[] { "fade", "cut" },
+            Width = 92, DataSource = new[] { "fade", "cut" },
             DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton
         });
-        TextColumn("Ảnh minh họa (nhấp đôi để chọn)", nameof(AiVideoScene.ImagePath), 230);
+        TextColumn("Ảnh (nhấp đôi để chọn)", nameof(AiVideoScene.ImagePath), 195);
         TextColumn("Director", nameof(AiVideoScene.DirectorSummary), 220, true);
         TextColumn("Lời thuyết minh", nameof(AiVideoScene.Narration), 300, true);
         TextColumn("Ghi chú", nameof(AiVideoScene.Notes), 240);
+        storyboardGrid.EnableHeadersVisualStyles = false;
+        storyboardGrid.BackgroundColor = Color.White;
+        storyboardGrid.BorderStyle = BorderStyle.None;
+        storyboardGrid.ColumnHeadersHeight = 32;
+        storyboardGrid.RowTemplate.Height = 31;
+        storyboardGrid.GridColor = Color.FromArgb(224, 230, 236);
+        storyboardGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(230, 237, 246);
+        storyboardGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(30, 47, 69);
+        storyboardGrid.ColumnHeadersDefaultCellStyle.Font = new Font(
+            storyboardGrid.Font, FontStyle.Bold);
+        storyboardGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(246, 250, 255);
         storyboardGrid.DataError += (_, args) => {
             status.Text = "Cảnh có kiểu hiệu ứng không hợp lệ hoặc dữ liệu chưa được lưu.";
             args.ThrowException = false;

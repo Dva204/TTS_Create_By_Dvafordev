@@ -12,7 +12,8 @@ public sealed partial class AiVideoStudioControl
 {
     private readonly FlowLayoutPanel sceneStrip = new() {
         Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false, AutoScroll = true, Padding = new Padding(4, 3, 4, 2)
+        WrapContents = false, AutoScroll = true, Padding = new Padding(4, 3, 4, 2),
+        BackColor = Color.White
     };
     private readonly Label timelineSummary = new() {
         Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
@@ -35,6 +36,12 @@ public sealed partial class AiVideoStudioControl
         wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         wrapper.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        wrapper.BackColor = Color.White;
+        timelineSummary.Font = new Font(timelineSummary.Font, FontStyle.Bold);
+        timelineSummary.ForeColor = Color.FromArgb(35, 54, 81);
+        timelineSummary.Padding = new Padding(6, 0, 0, 0);
+        trackOverview.ForeColor = Color.FromArgb(75, 95, 118);
+        trackOverview.Padding = new Padding(6, 0, 0, 0);
         wrapper.Controls.Add(timelineSummary, 0, 0);
         wrapper.Controls.Add(sceneStrip, 0, 1);
         wrapper.Controls.Add(trackOverview, 0, 2);

@@ -45,6 +45,58 @@ internal sealed class NativeVideoPlayer : AxHost
 
 public sealed partial class AiVideoStudioControl
 {
+    private readonly TableLayoutPanel previewOuter = new() {
+        Dock = DockStyle.Fill, Padding = new Padding(5)
+    };
+    private TableLayoutPanel previewPlayerArea = null!;
+    private TableLayoutPanel previewInfoArea = null!;
+    private Button previewTranscriptButton = null!;
+    private bool transcriptCollapsed;
+
+    private void LayoutPreviewPanels(bool wide)
+    {
+        if (previewPlayerArea is null || previewInfoArea is null) return;
+        previewOuter.SuspendLayout();
+        try
+        {
+            previewOuter.ColumnStyles.Clear();
+            previewOuter.RowStyles.Clear();
+            if (wide)
+            {
+                previewOuter.ColumnCount = 1;
+                previewOuter.RowCount = 2;
+                previewOuter.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                previewOuter.RowStyles.Add(new RowStyle(SizeType.Percent,
+                    transcriptCollapsed ? 100 : 72));
+                previewOuter.RowStyles.Add(new RowStyle(SizeType.Percent,
+                    transcriptCollapsed ? 0 : 28));
+                previewOuter.SetColumn(previewPlayerArea, 0);
+                previewOuter.SetRow(previewPlayerArea, 0);
+                previewOuter.SetColumn(previewInfoArea, 0);
+                previewOuter.SetRow(previewInfoArea, 1);
+            }
+            else
+            {
+                previewOuter.ColumnCount = 2;
+                previewOuter.RowCount = 1;
+                previewOuter.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                previewOuter.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,
+                    transcriptCollapsed ? 100 : 72));
+                previewOuter.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,
+                    transcriptCollapsed ? 0 : 28));
+                previewOuter.SetColumn(previewPlayerArea, 0);
+                previewOuter.SetRow(previewPlayerArea, 0);
+                previewOuter.SetColumn(previewInfoArea, 1);
+                previewOuter.SetRow(previewInfoArea, 0);
+            }
+            previewInfoArea.Visible = !transcriptCollapsed;
+            previewTranscriptButton.Text = transcriptCollapsed
+                ? "Hiện lời thoại" : "Ẩn lời thoại";
+        }
+        finally { previewOuter.ResumeLayout(true); }
+        UpdatePreviewViewport();
+    }
+
     private readonly Panel previewHost = new() { Dock = DockStyle.Fill, BackColor = Color.Black };
     private readonly PictureBox previewStill = new() {
         Dock = DockStyle.Fill, BackColor = Color.White, SizeMode = PictureBoxSizeMode.Zoom
@@ -107,20 +159,15 @@ public sealed partial class AiVideoStudioControl
 
     private void ConfigureInlinePreview(Control workspace)
     {
-        var outer = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Padding(5)
-        };
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
-        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        workspace.Controls.Add(outer);
-
+        workspace.Controls.Add(previewOuter);
         var left = new TableLayoutPanel {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
             Margin = new Padding(0), BackColor = Color.Black
         };
         left.RowStyles.Add(new RowStyle(SizeType.Absolute, 37));
         left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        outer.Controls.Add(left, 0, 0);
+        previewPlayerArea = left;
+        previewOuter.Controls.Add(left, 0, 0);
 
         var previewToolbar = new FlowLayoutPanel {
             Dock = DockStyle.Fill, WrapContents = false,
@@ -142,10 +189,23 @@ public sealed partial class AiVideoStudioControl
             {
                 split.Panel1Collapsed = !split.Panel1Collapsed;
                 focusVideo.Text = split.Panel1Collapsed ? "Hiện storyboard" : "Ưu tiên video";
+                if (!split.Panel1Collapsed)
+                {
+                    // If the user restored the window while focusing on video,
+                    // re-evaluate whether the editor belongs beside or above it.
+                    studioLayoutMode = -1;
+                    UpdateStudioLayout();
+                }
                 UpdatePreviewViewport();
             }
         };
         previewToolbar.Controls.Add(focusVideo);
+        previewTranscriptButton = new Button { Text = "Ẩn lời thoại", AutoSize = true };
+        previewTranscriptButton.Click += (_, _) => {
+            transcriptCollapsed = !transcriptCollapsed;
+            LayoutPreviewPanels(workspaceSplit.Width >= 1180);
+        };
+        previewToolbar.Controls.Add(previewTranscriptButton);
         previewToolbar.Controls.Add(new Label {
             Text = "Tỷ lệ chỉ áp dụng cho khung xem, không đổi file MP4",
             AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(9, 7, 0, 0)
@@ -159,11 +219,15 @@ public sealed partial class AiVideoStudioControl
         previewHint.Dock = DockStyle.Bottom;
         ConfigurePreviewRatioPicker();
 
-        var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        info.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+        var info = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3,
+            BackColor = Color.White, Padding = new Padding(3, 2, 3, 0)
+        };
+        info.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         info.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        info.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        outer.Controls.Add(info, 1, 0);
+        info.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
+        previewInfoArea = info;
+        previewOuter.Controls.Add(info, 1, 0);
         info.Controls.Add(previewHeader, 0, 0);
         info.Controls.Add(previewNarration, 0, 1);
 
@@ -182,6 +246,7 @@ public sealed partial class AiVideoStudioControl
         previewNarration.Text = "Chọn một scene trong timeline để xem ảnh.";
         previewHeader.Text = "TRÌNH XEM TRƯỚC / TTS TỔNG";
         previewHint.Text = "Ảnh gốc (không phải clip đã render)";
+        LayoutPreviewPanels(workspaceSplit.Width >= 1180);
     }
 
     private static Image CreatePreviewBitmap(string? file, int width, int height)
