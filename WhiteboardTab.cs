@@ -20,7 +20,7 @@ public partial class Form1
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         page.Controls.Add(layout);
         mainTabControl.TabPages.Add(page);
-        InitializeWhiteboardBatchTab();
+        // Whiteboard Batch is superseded by AI Video Studio. Keep its renderer code for compatibility.
 
         TextBox AddFileRow(int row, string title, string filter, bool save = false)
         {
