@@ -22,6 +22,7 @@ public partial class Form1 : Form
     public Form1()
     {
         InitializeComponent();
+        InitializeWhiteboardTab();
         api = new(settings);
         backend.OutputReceived += WriteLog;
         FormClosing += Form1_FormClosing;

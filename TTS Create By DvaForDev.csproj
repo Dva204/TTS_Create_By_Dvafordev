@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -15,4 +15,9 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="whiteboard_tools\**\*.py" Exclude="whiteboard_tools\**\__pycache__\**\*;whiteboard_tools\test_*.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
