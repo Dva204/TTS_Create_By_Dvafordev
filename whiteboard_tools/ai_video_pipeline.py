@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Render a schemaVersion=1 AI Video Studio storyboard locally.
 
 Styles implemented in this version: whiteboard, layer, image-motion,
@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-CURRENT_VERSION = "ai-video-render-v2.0.0-rc1"
+CURRENT_VERSION = "ai-video-render-v2.1.0-a1"
 SUPPORTED = {"whiteboard", "layer", "image-motion", "image-story", "text"}
 RESAMPLE = Image.Resampling.LANCZOS
 
@@ -65,6 +65,12 @@ def load_project(path: Path, audio_seconds: float, scene_index: int = 0):
     if raw.get("schemaVersion") != 1:
         raise ValueError("Unsupported schemaVersion; expected 1")
     root = path.parent
+    scale = raw.get("whiteboardRenderScale", 1.0)
+    sharp = raw.get("whiteboardSharpenAmount", 0.0)
+    if type(scale) not in (int, float) or not math.isfinite(scale) or not 1 <= scale <= 2:
+        raise ValueError("whiteboardRenderScale must be a finite number from 1.0 to 2.0")
+    if type(sharp) not in (int, float) or not math.isfinite(sharp) or not 0 <= sharp <= 0.5:
+        raise ValueError("whiteboardSharpenAmount must be a finite number from 0.0 to 0.5")
     scenes = raw.get("scenes", [])
     if not isinstance(scenes, list) or not scenes:
         raise ValueError("Project must have at least one scene")
@@ -261,7 +267,10 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
     if image.suffix.lower() == ".svg":
         strokes = image
     else:
-        strokes, source_image = prepare_raster(image, folder, width, height, "edges")
+        # High-fidelity drawing gets extra contour detail without touching
+        # the original raster asset, which is still used as the color plate.
+        mode = "detail" if scene.get("whiteboardScale", 1.0) > 1.0 else "edges"
+        strokes, source_image = prepare_raster(image, folder, width, height, mode)
     length = scene["end"] - scene["start"]
     tail = max(.35, min(2.2, length * .3))
     cmd = [str(engine), "render-image", str(strokes),
@@ -270,13 +279,16 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
            "--fps", str(fps), "--hand", "asian", "--animation-preset",
            "classic", "--color-fill", "fade",
            "--tail-color", f"{tail:.3f}"]
+    if scene.get("whiteboardScale", 1.0) > 1.0:
+        cmd += ["--stroke-detail", "rich"]
     if source_image:
         cmd += ["--source-image", str(source_image), "--source-fit", "exact"]
     execute(cmd, "Whiteboard scene")
 
 
 def normalize_clip(raw: Path, destination: Path, width: int,
-                   height: int, fps: int, frames: int, fade_in: bool = False):
+                   height: int, fps: int, frames: int, fade_in: bool = False,
+                   sharpen: float = 0.0):
     # All scene clips share codec, dimensions, pixel format and timebase.
     # A subtle white fade never overlaps two clips or moves SRT audio timing.
     chain = (f"scale={width}:{height}:flags=lanczos,"
@@ -284,6 +296,10 @@ def normalize_clip(raw: Path, destination: Path, width: int,
     if fade_in:
         seconds = min(.28, (frames / fps) * .35)
         chain += f",fade=t=in:st=0:d={seconds:.3f}:color=white"
+    if sharpen > 0:
+        # Mild post-sharpening only for the selected Whiteboard scene.
+        # Strong sharpening can introduce artificial halos around black lines.
+        chain += f",unsharp=3:3:{sharpen:.3f}:3:3:0"
     chain += ",format=yuv420p"
     execute([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -294,8 +310,12 @@ def normalize_clip(raw: Path, destination: Path, width: int,
     ], "Normalize scene")
 
 
-def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int):
+def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int,
+                 final_size: tuple[int, int] | None = None):
     chunks = [CURRENT_VERSION, scene["style"], str(width), str(height),
+              str(final_size or (width, height)),
+              str(scene.get("whiteboardScale", 1.0)),
+              str(scene.get("whiteboardSharpen", 0.0)),
               str(fps), str(frames), scene["text"], scene["notes"],
               json.dumps(scene.get("directionEvents", []), sort_keys=True),
               scene.get("transition", "fade")]
@@ -329,6 +349,17 @@ def render_project(args):
         project, project_file.parent, audio_seconds)
     width, height, fps = (640, 360, 20) if args.quality == "preview" else (1280, 720, 24)
     export_w, export_h = (640, 360) if args.quality == "preview" else (1920, 1080)
+    wb_scale = float(project.get("whiteboardRenderScale", 1.0))
+    wb_sharpen = float(project.get("whiteboardSharpenAmount", 0.0))
+    high_fidelity = args.quality == "youtube" and wb_scale > 1.0
+    # All cached scene clips need identical dimensions for lossless concat.
+    # Only Whiteboard strokes need high-res tracing; other styles render at
+    # their old resolution and are normalized once to the common clip size.
+    norm_w, norm_h = (export_w, export_h) if high_fidelity else (width, height)
+    if high_fidelity:
+        say(f"[QUALITY] Whiteboard scale={wb_scale:.2f}x, "
+            f"native {int(width * wb_scale)}x{int(height * wb_scale)}; "
+            f"normalize to {norm_w}x{norm_h}")
     output = Path(args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     workspace = output.parent / (output.stem + ".ai_video_work")
@@ -349,12 +380,19 @@ def render_project(args):
     for scene in work_scenes:
         idx = scene["index"]
         frames = scene_frame_count(scene, fps)
+        is_hd_wb = high_fidelity and scene["style"] == "whiteboard"
+        scene_scale = wb_scale if is_hd_wb else 1.0
+        scene["whiteboardScale"] = scene_scale
+        scene["whiteboardSharpen"] = wb_sharpen if (args.quality == "youtube" and scene["style"] == "whiteboard") else 0.0
+        scene_w = int(width * scene_scale)
+        scene_h = int(height * scene_scale)
         if frames < 1:
             raise ValueError(f"Scene {idx} has no video frames")
         folder = workspace / f"scene_{idx:03d}"
         folder.mkdir(exist_ok=True)
         clip, cache = folder / "clip.mp4", folder / "cache.txt"
-        fingerprint = digest_scene(scene, width, height, fps, frames)
+        fingerprint = digest_scene(scene, scene_w, scene_h, fps, frames,
+                                   final_size=(norm_w, norm_h))
         fingerprints.append(fingerprint)
         if (clip.is_file() and cache.is_file() and
                 cache.read_text(encoding="ascii") == fingerprint):
@@ -363,7 +401,7 @@ def render_project(args):
             raw = folder / "raw.mp4"
             say(f"[SCENE] {idx}/{len(scenes)} {scene['style']}")
             if scene["style"] in ("whiteboard", "layer"):
-                render_whiteboard(scene, raw, folder, width, height, fps,
+                render_whiteboard(scene, raw, folder, scene_w, scene_h, fps,
                                   engine, project_file.parent)
             elif scene["style"] == "text":
                 render_text(raw, scene["text"], width, height, fps, frames, scene["image"])
@@ -376,9 +414,11 @@ def render_project(args):
                 directed = folder / "director_effects.mp4"
                 apply_direction(raw, directed, scene["directionEvents"],
                                 folder, width, height, fps, frames)
-                normalize_clip(directed, clip, width, height, fps, frames, fade_in=fade)
+                normalize_clip(directed, clip, norm_w, norm_h, fps, frames,
+                               fade_in=fade, sharpen=scene["whiteboardSharpen"])
             else:
-                normalize_clip(raw, clip, width, height, fps, frames, fade_in=fade)
+                normalize_clip(raw, clip, norm_w, norm_h, fps, frames,
+                               fade_in=fade, sharpen=scene["whiteboardSharpen"])
             cache.write_text(fingerprint, encoding="ascii")
         clips.append(clip)
     # Final-export cache: unchanged scenes and identical source audio do not
@@ -390,6 +430,9 @@ def render_project(args):
         "quality": args.quality, "width": export_w, "height": export_h,
         "fps": fps, "sceneIndex": args.scene_index,
         "duration": audio_seconds,
+        "whiteboardRenderScale": wb_scale,
+        "whiteboardSharpenAmount": wb_sharpen,
+        "clipSize": [norm_w, norm_h],
         "tracks": track_signature(project, music, burn_subtitles, subtitle_cues),
     }, sort_keys=True).encode("utf-8")).hexdigest()
     export_stamp = workspace / "export.signature"
@@ -485,6 +528,10 @@ def render_project(args):
         "burnSubtitles": burn_subtitles,
         "backgroundMusic": str(music) if music else None,
         "musicVolume": music_volume if music else None,
+        "whiteboardRenderScale": wb_scale,
+        "whiteboardSharpenAmount": wb_sharpen,
+        "sceneRenderSize": [width, height],
+        "sceneClipSize": [norm_w, norm_h],
         "scenes": [{"index": s["index"], "style": s["style"],
                     "start": s["start"], "end": s["end"],
                     "frames": scene_frame_count(s, fps),

@@ -52,6 +52,7 @@ public sealed partial class AiVideoStudioControl
         bar.Controls.Add(increase);
         bar.Controls.Add(decrease);
         ConfigureComposerButtons(bar);
+        ConfigureWhiteboardQualityButton(bar);
         bar.Controls.Add(explanation);
         increase.Click += (_, _) => ShiftSceneBoundary(+1);
         decrease.Click += (_, _) => ShiftSceneBoundary(-1);

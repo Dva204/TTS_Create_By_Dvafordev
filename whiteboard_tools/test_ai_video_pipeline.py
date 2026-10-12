@@ -126,6 +126,38 @@ class ProjectPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported transition"):
             self.parse()
 
+    def test_whiteboard_quality_defaults_are_backward_compatible(self):
+        self.example["scenes"][0]["styleId"] = "whiteboard"
+        scene = self.parse()[0]
+        self.assertEqual(self.example.get("whiteboardRenderScale", 1.0), 1.0)
+        self.assertEqual(scene["style"], "whiteboard")
+
+    def test_reject_invalid_quality_scales_and_sharpen(self):
+        for value in (-1, 0, 2.1, "not-a-number", float("nan")):
+            self.example["whiteboardRenderScale"] = value
+            with self.assertRaisesRegex(ValueError, "whiteboardRenderScale"):
+                self.parse()
+        self.example["whiteboardRenderScale"] = 1.5
+        for amount in (-.1, .51, float("inf")):
+            self.example["whiteboardSharpenAmount"] = amount
+            with self.assertRaisesRegex(ValueError, "whiteboardSharpenAmount"):
+                self.parse()
+
+    def test_native_hd_scene_changes_cache_fingerprint(self):
+        self.example["scenes"][0]["styleId"] = "whiteboard"
+        scene = self.parse()[0]
+        scene["whiteboardScale"] = 1.0
+        ordinary = digest_scene(scene, 1280, 720, 24, 85,
+                                final_size=(1280, 720))
+        scene["whiteboardScale"] = 1.5
+        scene["whiteboardSharpen"] = .15
+        native = digest_scene(scene, 1920, 1080, 24, 85,
+                              final_size=(1920, 1080))
+        self.assertNotEqual(ordinary, native)
+        scene["whiteboardSharpen"] = .3
+        self.assertNotEqual(native, digest_scene(
+            scene, 1920, 1080, 24, 85, final_size=(1920, 1080)))
+
     def test_cache_fingerprint_changes_with_image_and_text(self):
         scene = self.parse()[0]
         baseline = digest_scene(scene, 640, 360, 20, 70)

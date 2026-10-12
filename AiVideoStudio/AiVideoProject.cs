@@ -24,6 +24,10 @@ public sealed class AiVideoProject
     public string MusicPath { get; set; } = "";
     public double MusicVolume { get; set; } = 0.12;
     public bool BurnSubtitles { get; set; } = false;
+    // V2.1-A: 1.0 = original 720p render; 1.5 = native 1080p;
+    // 2.0 = native 1440p supersampling followed by Lanczos downsampling.
+    public double WhiteboardRenderScale { get; set; } = 1.0;
+    public double WhiteboardSharpenAmount { get; set; } = 0.0;
     public List<AiVideoScene> Scenes { get; set; } = new();
     [JsonIgnore]
     public string FilePath { get; set; } = "";
@@ -281,6 +285,12 @@ public static class AiVideoProjectService
             throw new InvalidDataException("Âm lượng nhạc nền phải trong khoảng 0–50%.");
         if (project.BurnSubtitles && string.IsNullOrWhiteSpace(project.SubtitlePath))
             throw new InvalidDataException("Bật phụ đề cần có file SRT.");
+        if (!double.IsFinite(project.WhiteboardRenderScale) ||
+            project.WhiteboardRenderScale < 1.0 || project.WhiteboardRenderScale > 2.0)
+            throw new InvalidDataException("Render scale Whiteboard phải từ 1.0x đến 2.0x.");
+        if (!double.IsFinite(project.WhiteboardSharpenAmount) ||
+            project.WhiteboardSharpenAmount < 0 || project.WhiteboardSharpenAmount > 0.5)
+            throw new InvalidDataException("Độ nét Whiteboard phải từ 0 đến 0.5.");
     }
 
     public static void Save(AiVideoProject project, string targetFile)
