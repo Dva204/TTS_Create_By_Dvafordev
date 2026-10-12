@@ -127,11 +127,22 @@ class ProjectPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported transition"):
             self.parse()
 
-    def test_whiteboard_quality_defaults_are_backward_compatible(self):
+    def test_whiteboard_quality_default_for_old_json(self):
         self.example["scenes"][0]["styleId"] = "whiteboard"
-        scene = self.parse()[0]
-        self.assertEqual(self.example.get("whiteboardRenderScale", 1.0), 1.0)
-        self.assertEqual(scene["style"], "whiteboard")
+        project, scenes = load_project(self.plan_written(), 7.0)  # omitted keys
+        self.assertEqual(project["whiteboardRenderScale"], 1.5)
+        self.assertEqual(project["whiteboardSharpenAmount"], .15)
+        self.assertEqual(project["whiteboardRevealMode"], "source-mask")
+        self.assertEqual(scenes[0]["style"], "whiteboard")
+
+    def test_whiteboard_existing_saved_preferences_are_preserved(self):
+        self.example.update(whiteboardRenderScale=1.0,
+                            whiteboardSharpenAmount=0.0,
+                            whiteboardRevealMode="classic")
+        project, _ = load_project(self.plan_written(), 7.0)
+        self.assertEqual(project["whiteboardRenderScale"], 1.0)
+        self.assertEqual(project["whiteboardSharpenAmount"], 0.0)
+        self.assertEqual(project["whiteboardRevealMode"], "classic")
 
     def test_reject_invalid_quality_scales_and_sharpen(self):
         for value in (-1, 0, 2.1, "not-a-number", float("nan")):
@@ -159,10 +170,10 @@ class ProjectPipelineTests(unittest.TestCase):
         self.assertNotEqual(native, digest_scene(
             scene, 1920, 1080, 24, 85, final_size=(1920, 1080)))
 
-    def test_reveal_mode_defaults_to_classic(self):
+    def test_reveal_mode_defaults_to_source_mask(self):
         self.example["scenes"][0]["styleId"] = "whiteboard"
         p, scenes = load_project(self.plan_written(), 7.0)
-        self.assertEqual(p.get("whiteboardRevealMode", "classic"), "classic")
+        self.assertEqual(p["whiteboardRevealMode"], "source-mask")
         self.assertEqual(scenes[0]["style"], "whiteboard")
 
     def plan_written(self):

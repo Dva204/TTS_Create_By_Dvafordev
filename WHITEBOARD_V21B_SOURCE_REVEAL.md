@@ -15,7 +15,7 @@ AI segmentation hay API.
 
 ## Cách hoạt động
 
-- **Cổ điển** (mặc định, tương thích project cũ): tay vẽ nét trước,
+- **Cổ điển** (tùy chọn tương thích project cũ đã lưu thiết lập này): tay vẽ nét trước,
   màu ảnh gốc xuất hiện dần bằng `--color-fill fade`.
 - **Giữ màu ảnh gốc — reveal theo đường viền**:
   tay vẽ nét trước; giai đoạn tô màu dùng `--color-fill contour-wipe`
@@ -49,7 +49,7 @@ Trong AI Video Studio → Độ nét Whiteboard:
 Project JSON có thêm:
   "whiteboardRevealMode": "source-mask"
 
-`classic` là mặc định nếu file cũ không có key mới. Thông số chỉ
+Mặc định mới cho dự án mới và JSON cũ thiếu thiết lập Whiteboard: **Nét cao (1.5x), tăng nét 15%, giữ màu ảnh gốc (source-mask)**. Các project đã lưu thiết lập riêng vẫn giữ nguyên giá trị; chế độ classic luôn có thể chọn lại. Thông số chỉ
 áp dụng cho scene dùng kiểu **Tay vẽ Whiteboard**, không thay đổi
 TTS, Voice Library, Video Editor, track nhạc, SRT, các scene khác.
 Chọn mode khác sẽ làm mới cache scene tương ứng.

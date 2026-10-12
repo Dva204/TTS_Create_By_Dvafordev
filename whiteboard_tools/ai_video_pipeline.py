@@ -65,15 +65,20 @@ def load_project(path: Path, audio_seconds: float, scene_index: int = 0):
     if raw.get("schemaVersion") != 1:
         raise ValueError("Unsupported schemaVersion; expected 1")
     root = path.parent
-    scale = raw.get("whiteboardRenderScale", 1.0)
-    sharp = raw.get("whiteboardSharpenAmount", 0.0)
+    scale = raw.get("whiteboardRenderScale", 1.5)
+    sharp = raw.get("whiteboardSharpenAmount", 0.15)
     if type(scale) not in (int, float) or not math.isfinite(scale) or not 1 <= scale <= 2:
         raise ValueError("whiteboardRenderScale must be a finite number from 1.0 to 2.0")
     if type(sharp) not in (int, float) or not math.isfinite(sharp) or not 0 <= sharp <= 0.5:
         raise ValueError("whiteboardSharpenAmount must be a finite number from 0.0 to 0.5")
-    reveal_mode = raw.get("whiteboardRevealMode", "classic")
+    reveal_mode = raw.get("whiteboardRevealMode", "source-mask")
     if reveal_mode not in ("classic", "source-mask"):
         raise ValueError("whiteboardRevealMode must be 'classic' or 'source-mask'")
+    # Normalize missing keys in historical project JSON; explicit per-project
+    # preferences continue to override the new creation defaults.
+    raw.setdefault("whiteboardRenderScale", 1.5)
+    raw.setdefault("whiteboardSharpenAmount", 0.15)
+    raw.setdefault("whiteboardRevealMode", "source-mask")
     scenes = raw.get("scenes", [])
     if not isinstance(scenes, list) or not scenes:
         raise ValueError("Project must have at least one scene")
@@ -363,9 +368,9 @@ def render_project(args):
         project, project_file.parent, audio_seconds)
     width, height, fps = (640, 360, 20) if args.quality == "preview" else (1280, 720, 24)
     export_w, export_h = (640, 360) if args.quality == "preview" else (1920, 1080)
-    wb_scale = float(project.get("whiteboardRenderScale", 1.0))
-    wb_sharpen = float(project.get("whiteboardSharpenAmount", 0.0))
-    wb_reveal = project.get("whiteboardRevealMode", "classic")
+    wb_scale = float(project.get("whiteboardRenderScale", 1.5))
+    wb_sharpen = float(project.get("whiteboardSharpenAmount", 0.15))
+    wb_reveal = project.get("whiteboardRevealMode", "source-mask")
     high_fidelity = args.quality == "youtube" and wb_scale > 1.0
     # All cached scene clips need identical dimensions for lossless concat.
     # Only Whiteboard strokes need high-res tracing; other styles render at

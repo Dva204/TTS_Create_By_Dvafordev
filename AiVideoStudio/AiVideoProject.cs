@@ -26,11 +26,11 @@ public sealed class AiVideoProject
     public bool BurnSubtitles { get; set; } = false;
     // V2.1-A: 1.0 = original 720p render; 1.5 = native 1080p;
     // 2.0 = native 1440p supersampling followed by Lanczos downsampling.
-    public double WhiteboardRenderScale { get; set; } = 1.0;
-    public double WhiteboardSharpenAmount { get; set; } = 0.0;
+    public double WhiteboardRenderScale { get; set; } = 1.5;
+    public double WhiteboardSharpenAmount { get; set; } = 0.15;
     // "classic" preserves prior fade; "source-mask" reveals the exact
     // source color plate through the engine's progressive contour mask.
-    public string WhiteboardRevealMode { get; set; } = "classic";
+    public string WhiteboardRevealMode { get; set; } = "source-mask";
     public List<AiVideoScene> Scenes { get; set; } = new();
     [JsonIgnore]
     public string FilePath { get; set; } = "";
