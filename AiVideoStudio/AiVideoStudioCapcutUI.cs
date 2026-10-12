@@ -102,11 +102,62 @@ public sealed partial class AiVideoStudioControl
         toolbar.Controls.Add(StudioAction("Mở dự án", OpenProject));
         toolbar.Controls.Add(StudioAction("Lưu", () => SaveProject()));
         toolbar.Controls.Add(StudioAction("Lưu thành...", () => SaveProject(asNew: true)));
-        ConfigureRenderButtons(toolbar);
+        // Move the original render buttons, with their async handlers and
+        // in-progress state, out of the legacy project settings row.
+        // Never create a second Export button or duplicate render handlers.
+        var sourceActions = sourceControls.GetControlFromPosition(1, 5)
+            as FlowLayoutPanel ?? throw new InvalidOperationException(
+                "Missing original video render toolbar");
+        Button MoveRenderAction(string name, Control destination)
+        {
+            var button = sourceActions.Controls.OfType<Button>()
+                .FirstOrDefault(b => b.Text == name)
+                ?? throw new InvalidOperationException("Missing render action: " + name);
+            sourceActions.Controls.Remove(button);
+            destination.Controls.Add(button);
+            return button;
+        }
+        MoveRenderAction("Xem trước MP4", toolbar);
+        MoveRenderAction("Xem cảnh đã chọn", toolbar);
+        MoveRenderAction("Dừng render", toolbar);
         toolbar.Controls.Add(StudioAction("Bảng chi tiết", ToggleCapcutDetails));
         toolbar.Controls.Add(StudioAction("Nhạc / Phụ đề", EditComposerTracks));
         toolbar.Controls.Add(StudioAction("Whiteboard HD", EditWhiteboardQuality));
-        root.Controls.Add(toolbar, 0, 0);
+        // Export is the ONE primary call to action, persistently anchored to
+        // the top-right. It stays visible when the other actions wrap or scroll.
+        var header = new TableLayoutPanel {
+            Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2,
+            Margin = new Padding(0), BackColor = Color.White
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 226));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        header.Controls.Add(toolbar, 0, 0);
+        var exportHost = new Panel {
+            Dock = DockStyle.Fill, Padding = new Padding(9, 10, 10, 10),
+            BackColor = Color.FromArgb(236, 247, 242)
+        };
+        header.Controls.Add(exportHost, 1, 0);
+        var export = MoveRenderAction("Xuất YouTube", exportHost);
+        export.Name = "btnExportYouTubePrimary";
+        export.Text = "XUẤT VIDEO\\nYouTube · 1080p".Replace("\\n", Environment.NewLine);
+        export.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
+        export.AutoSize = false;
+        export.Dock = DockStyle.Fill;
+        export.Margin = new Padding(0);
+        export.FlatStyle = FlatStyle.Flat;
+        export.FlatAppearance.BorderSize = 0;
+        export.FlatAppearance.MouseOverBackColor = Color.FromArgb(15, 122, 68);
+        export.BackColor = Color.FromArgb(20, 145, 81);
+        export.ForeColor = Color.White;
+        export.TextAlign = ContentAlignment.MiddleCenter;
+        export.Cursor = Cursors.Hand;
+        export.AccessibleName = "Xuất video YouTube Full HD";
+        export.AccessibleDescription = "Xuất toàn bộ storyboard thành MP4 1920×1080, sử dụng TTS và SRT đã chọn.";
+        var exportTip = new ToolTip();
+        exportTip.SetToolTip(export, "Xuất YouTube · Full HD 1920×1080 · H.264 + AAC");
+        export.Disposed += (_, _) => exportTip.Dispose();
+        root.Controls.Add(header, 0, 0);
 
         capcutWorkspace = new TableLayoutPanel {
             Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 3,

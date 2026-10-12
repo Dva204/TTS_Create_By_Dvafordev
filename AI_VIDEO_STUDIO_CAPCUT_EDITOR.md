@@ -9,7 +9,10 @@ Phạm vi: tái cấu trúc WinForms, **không đổi renderer/audio/SRT/project
 **Thanh công cụ trên cùng**
 - Tên dự án; Nguồn TTS / SRT / Ảnh; Thư viện ảnh
 - Tạo storyboard; mở/lưu project JSON
-- Xem trước MP4; Xem cảnh đã chọn; Xuất YouTube; Dừng render
+- Xem trước MP4; Xem cảnh đã chọn; Dừng render
+- **Xuất video** (YouTube Full HD): nút màu xanh lá chữ trắng in đậm
+  cỡ lớn, ở cột riêng cố định phía trên bên phải; luôn cùng một handler
+  render cũ, **không có nút xuất trùng lặp** trong phần nguồn dự án.
 - Bảng chi tiết; Nhạc / Phụ đề; Whiteboard HD
 - Các nút tự xuống dòng trên màn hình nhỏ hơn, không bị che vì toolbar một hàng.
 
