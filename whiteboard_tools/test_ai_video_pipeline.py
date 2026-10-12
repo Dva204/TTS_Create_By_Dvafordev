@@ -72,6 +72,34 @@ class ProjectPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least one"):
             self.parse()
 
+    def test_direction_events_loaded_and_cache_invalidated(self):
+        scene = self.example["scenes"][0]
+        scene["directionEvents"] = [
+            {"kind": "text", "startMs": 150, "durationMs": 1100,
+             "text": "1903", "zoom": 1.1, "focusX": .5, "focusY": .5}
+        ]
+        parsed = self.parse()[0]
+        self.assertEqual(parsed["directionEvents"][0]["text"], "1903")
+        base = digest_scene(parsed, 640, 360, 20, 70)
+        parsed["directionEvents"][0]["text"] = "1904"
+        self.assertNotEqual(base, digest_scene(parsed, 640, 360, 20, 70))
+
+    def test_invalid_direction_time_rejected(self):
+        self.example["scenes"][0]["directionEvents"] = [
+            {"kind": "text", "startMs": 3200, "durationMs": 1000,
+             "text": "Wrong", "zoom": 1.1, "focusX": .5, "focusY": .5}
+        ]
+        with self.assertRaisesRegex(ValueError, "scene duration"):
+            self.parse()
+
+    def test_invalid_zoom_focus_rejected(self):
+        self.example["scenes"][0]["directionEvents"] = [
+            {"kind": "zoom", "startMs": 800, "durationMs": 1600,
+             "text": "", "zoom": 1.12, "focusX": 2.5, "focusY": .5}
+        ]
+        with self.assertRaisesRegex(ValueError, "safe range"):
+            self.parse()
+
     def test_cache_fingerprint_changes_with_image_and_text(self):
         scene = self.parse()[0]
         baseline = digest_scene(scene, 640, 360, 20, 70)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -36,6 +36,26 @@ public sealed class AiVideoScene
     public string ImagePath { get; set; } = "";
     public string Narration { get; set; } = "";
     public string Notes { get; set; } = "";
+    // Relative to the start of this scene; user-editable AI Director suggestions.
+    public List<AiVideoDirectionEvent> DirectionEvents { get; set; } = new();
+    [JsonIgnore]
+    public string DirectorSummary =>
+        DirectionEvents is { Count: > 0 }
+            ? string.Join(" + ", DirectionEvents.Select(e =>
+                e.Kind == "text" ? "Chữ: " + e.Text : $"Zoom {e.Zoom:0.00}x"))
+            : "Chưa có";
+}
+
+public sealed class AiVideoDirectionEvent
+{
+    // "text" or "zoom"; only these event types are supported in V1.2.
+    public string Kind { get; set; } = "text";
+    public int StartMs { get; set; }
+    public int DurationMs { get; set; } = 1400;
+    public string Text { get; set; } = "";
+    public double Zoom { get; set; } = 1.10;
+    public double FocusX { get; set; } = .5;
+    public double FocusY { get; set; } = .5;
 }
 
 public sealed record AiSubtitleCue(int Index, long StartMs, long EndMs, string Text);
@@ -133,6 +153,21 @@ public static class AiVideoProjectService
                 scene.CueTo < scene.CueFrom || scene.StartMs < previousEnd ||
                 scene.EndMs <= scene.StartMs || !SupportedStyles.Contains(scene.StyleId))
                 throw new InvalidDataException($"Cảnh {i + 1} có mốc SRT/thời gian/kiểu hiệu ứng không hợp lệ.");
+            if ((scene.DirectionEvents?.Count ?? 0) > 4)
+                throw new InvalidDataException($"Cảnh {i + 1} có quá nhiều hiệu ứng Director (tối đa 4).");
+            if ((scene.DirectionEvents?.Count(e => e.Kind == "zoom") ?? 0) > 1)
+                throw new InvalidDataException($"Cảnh {i + 1} chỉ hỗ trợ một zoom.");
+            foreach (var shot in scene.DirectionEvents ?? new())
+            {
+                if (shot.Kind is not ("text" or "zoom") ||
+                    shot.StartMs < 0 || shot.DurationMs <= 0 ||
+                    (long)shot.StartMs + shot.DurationMs > scene.EndMs - scene.StartMs ||
+                    shot.Zoom < 1 || shot.Zoom > 1.22 ||
+                    shot.FocusX < 0 || shot.FocusX > 1 ||
+                    shot.FocusY < 0 || shot.FocusY > 1 ||
+                    shot.Text.Length > 90)
+                    throw new InvalidDataException($"Hiệu ứng Director ở cảnh {i + 1} không hợp lệ.");
+            }
             expectedCue = scene.CueTo + 1;
             previousEnd = scene.EndMs;
         }

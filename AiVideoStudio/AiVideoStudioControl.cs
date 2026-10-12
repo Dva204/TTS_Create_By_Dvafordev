@@ -123,12 +123,13 @@ public sealed partial class AiVideoStudioControl : UserControl
         openAsset.Click += (_, _) => OpenSelectedImage();
         inputs.Controls.Add(openAsset, 2, 5);
 
-        AddLabel("Trạng thái hỗ trợ", 6);
-        inputs.Controls.Add(new Label {
-            Text = "V1.1: Xuất MP4 bằng Whiteboard, Layer, Zoom/Pan, Image Story và Text.",
-            TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill
-        }, 1, 6);
-        inputs.SetColumnSpan(inputs.GetControlFromPosition(1, 6)!, 2);
+        AddLabel("AI Video Director", 6);
+        var directorBar = new FlowLayoutPanel {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false
+        };
+        ConfigureDirectorButtons(directorBar);
+        inputs.Controls.Add(directorBar, 1, 6);
+        inputs.SetColumnSpan(directorBar, 2);
 
         ConfigureGrid();
         view.Controls.Add(storyboardGrid, 0, 1);
@@ -186,6 +187,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         };
         storyboardGrid.Columns.Add(effects);
         TextColumn("Ảnh minh họa (nhấp đôi để chọn)", nameof(AiVideoScene.ImagePath), 230);
+        TextColumn("Director", nameof(AiVideoScene.DirectorSummary), 220, true);
         TextColumn("Lời thuyết minh", nameof(AiVideoScene.Narration), 300, true);
         TextColumn("Ghi chú", nameof(AiVideoScene.Notes), 240);
         storyboardGrid.DataError += (_, args) => {

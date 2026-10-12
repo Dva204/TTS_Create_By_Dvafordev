@@ -93,3 +93,21 @@ Các module phải có thể bị vô hiệu hóa mà không làm hỏng TTS hi�
   Full HD NVENC 1920x1080 24 FPS, cả hai đều 10.000 giây.
 - 8 bài test pipeline đạt; chưa test thực tế UI bằng chuột, chưa thử file TTS thật dài.
 - Hướng dẫn: AI_VIDEO_RENDER_GUIDE.md.
+
+
+## 7. V1.2 — AI Video Director (Smart Rules local)
+
+- [x] Đọc nội dung SRT và đề xuất thời điểm chèn chữ cho năm / phần trăm / số liệu.
+- [x] Đề xuất zoom nhẹ cho các câu nhấn mạnh, ưu tiên không trùng thời điểm caption.
+- [x] Lưu directionEvents trong AiVideoScene của schemaVersion=1; tương thích project cũ.
+- [x] Giao diện đề xuất hiệu ứng + chỉnh chi tiết từng cảnh (thời gian, chữ, zoom và tiêu điểm).
+- [x] Render text overlay có thời gian bằng Pillow/FFmpeg và camera zoom bằng zoompan.
+- [x] Cache nhận diện khi directionEvents thay đổi; validation C# và Python.
+- [x] Smoke test 6 giây preview/1080p NVENC có chữ và zoom.
+- [ ] Model ngôn ngữ hiểu ngữ nghĩa toàn bộ script + AI Vision xác định vị trí đối tượng trong ảnh.
+- [ ] Thử nghiệp thu UI trực tiếp bằng chuột và video dài >=8 phút với giọng TTS thật.
+
+### Phạm vi V1.2
+Đây là bộ gợi ý quy tắc chạy local, không phải AI VLM. Không khẳng định nó hiểu
+vị trí nhân vật hay quyết định chính xác mọi thời điểm zoom/chèn chữ.
+Tài liệu hướng dẫn: AI_VIDEO_DIRECTOR_GUIDE.md.

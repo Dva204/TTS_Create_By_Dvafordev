@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-CURRENT_VERSION = "ai-video-render-v1.1.1"
+CURRENT_VERSION = "ai-video-render-v1.2.0"
 SUPPORTED = {"whiteboard", "layer", "image-motion", "image-story", "text"}
 RESAMPLE = Image.Resampling.LANCZOS
 
@@ -87,11 +87,14 @@ def load_project(path: Path, audio_seconds: float):
             raise ValueError(f"Scene {index}: optional background image missing")
         if end / 1000 > audio_seconds + 0.4:
             raise ValueError(f"Scene {index}: scene extends beyond audio duration")
+        from director_effects import validate_events
+        direction = validate_events(scene.get("directionEvents") or [], end - start)
         prepared.append({"index": index, "style": style,
                          "start": start / 1000, "end": end / 1000,
                          "image": image,
                          "text": str(scene.get("narration") or ""),
-                         "notes": str(scene.get("notes") or "")})
+                         "notes": str(scene.get("notes") or ""),
+                         "directionEvents": direction})
         expected_cue = cue_to + 1
         last = end
     if audio_seconds - prepared[-1]["end"] > 10:
@@ -274,7 +277,8 @@ def normalize_clip(raw: Path, destination: Path, width: int,
 
 def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int):
     chunks = [CURRENT_VERSION, scene["style"], str(width), str(height),
-              str(fps), str(frames), scene["text"], scene["notes"]]
+              str(fps), str(frames), scene["text"], scene["notes"],
+              json.dumps(scene.get("directionEvents", []), sort_keys=True)]
     image = scene["image"]
     if image:
         chunks += [str(image), hashlib.sha256(image.read_bytes()).hexdigest()]
@@ -326,7 +330,14 @@ def render_project(args):
             else:
                 render_motion(scene["image"], raw, width, height, fps, frames,
                               folder, scene["style"] == "image-story")
-            normalize_clip(raw, clip, width, height, fps, frames)
+            if scene.get("directionEvents"):
+                from director_effects import apply_direction
+                directed = folder / "director_effects.mp4"
+                apply_direction(raw, directed, scene["directionEvents"],
+                                folder, width, height, fps, frames)
+                normalize_clip(directed, clip, width, height, fps, frames)
+            else:
+                normalize_clip(raw, clip, width, height, fps, frames)
             cache.write_text(fingerprint, encoding="ascii")
         clips.append(clip)
     playlist = workspace / "clips.ffconcat"
@@ -361,7 +372,8 @@ def render_project(args):
         "output": str(output), "audioSeconds": audio_seconds,
         "width": export_w, "height": export_h, "fps": fps,
         "scenes": [{"index": s["index"], "style": s["style"],
-                    "start": s["start"], "end": s["end"]} for s in scenes]
+                    "start": s["start"], "end": s["end"],
+                    "directorEvents": len(s.get("directionEvents", []))} for s in scenes]
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     say(f"[DONE] {output} — {len(scenes)} scenes, {audio_seconds:.2f}s")
 
