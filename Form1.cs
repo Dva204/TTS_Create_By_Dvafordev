@@ -23,6 +23,7 @@ public partial class Form1 : Form
     {
         InitializeComponent();
         InitializeWhiteboardTab();
+        InitializeAiVideoStudioTab();
         api = new(settings);
         backend.OutputReceived += WriteLog;
         FormClosing += Form1_FormClosing;

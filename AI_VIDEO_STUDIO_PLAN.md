@@ -1,0 +1,83 @@
+# DvaForDev AI Video Studio — Kế hoạch triển khai
+
+**Nhánh phát triển:** feature/ai-video-studio  
+**Ngày:** 12/10/2026  
+**Nguyên tắc:** THÊM module mới, giữ nguyên TTS / Voice Library / Video Editor / Settings đang hoạt động.
+
+## 0. Bảo vệ mã nguồn
+
+- main là bản TTS gốc, không commit/merge AI Studio vào main khi chưa nghiệm thu.
+- backup/tts-before-ai-video-studio đã push và trỏ đúng commit main a852d81.
+- feature/whiteboard-ai-local chứa 2 commit Whiteboard đã push.
+- feature/ai-video-studio phát triển trên Whiteboard, tất cả thay đổi AI Studio commit độc lập.
+- Những thay đổi cũ chưa commit trong Form1.cs, README và file dữ liệu không đưa vào commit mới.
+- Engine local: Python riêng, không thay .venv của TTS.
+
+## 1. Kiến trúc mở rộng (một ứng dụng, nhiều module)
+
+Giữ: TTS / Batch, Voice Library, Video Editor cũ và Settings.
+Thêm:
+1. AI Video Studio: quản lý project, nhập TTS/SRT/ảnh, tạo storyboard và chỉnh loại hiệu ứng mỗi cảnh.
+2. Animation Engine: whiteboard, layered, timeline, maps, infographic, typography, image motion (triển khai từng backend).
+3. Advanced Composer: render theo project.json, track/preview, SRT, nhạc, xuất MP4; tích hợp FFmpeg/NVENC.
+4. Project queue/cache: render scene độc lập, resume, đo tài nguyên.
+5. AI-assisted storyboard (optional, không bắt buộc API, luôn cho người dùng xác nhận).
+
+Các module phải có thể bị vô hiệu hóa mà không làm hỏng TTS hiện tại.
+
+## 2. Mốc phát triển
+
+### V1.0 — Nền tảng dự án / storyboard
+- [x] Tạo tab AI Video Studio riêng, không thay Video Editor cũ.
+- [x] Tạo/mở/lưu file project.ai-video.json (schemaVersion=1).
+- [x] Chọn đường dẫn WAV/MP3 và SRT từ TTS hiện có hoặc file bên ngoài (chưa gắn trực tiếp vào hàng đợi TTS).
+- [x] Chia scene bằng số cue SRT, cho phép sửa hiệu ứng và hình minh họa.
+- [x] Lưu các thiết lập scene và chọn kiểu hiệu ứng mỗi cảnh (template ngách ở giai đoạn sau).
+- [x] Test JSON/SRT/WinForms build, không render AI trong giai đoạn này.
+
+### V1.1 — Render pipeline thống nhất
+- [ ] Adapter cho Whiteboard và Layer đã hoạt động; import scene config.
+- [ ] Adapter Image Motion/Zoom-Pan/Text trước (nhẹ, FFmpeg).
+- [ ] Giữ timeline SRT, audio khớp từng scene.
+- [ ] Render preview 360p và Full HD nhanh (720p -> 1080p NVENC).
+- [ ] Cache và resume, test dự án ≥8 phút.
+
+### V1.2 — Đa định dạng animation
+- [ ] Map/Timeline SVG với tọa độ có nguồn xác thực; hỗ trợ từng layer.
+- [ ] Infographic, chart, motion graphics và phụ đề nhiều kiểu.
+- [ ] Timeline nhiều track với ảnh, audio, title, nhạc.
+
+### V2 — Storyboard AI hỗ trợ
+- [ ] Phân tích nội dung, đề xuất cảnh/prompt ảnh/hiệu ứng (model local hoặc API tùy chọn).
+- [ ] Người dùng duyệt/chỉnh storyboard trước khi render.
+- [ ] Template History, Psychology, Internet Mystery, Geography, Science, Business.
+- [ ] Batch tạo nhiều video, xuất 16:9 và 9:16.
+
+## 3. Quy tắc dữ liệu
+
+- JSON là nguồn sự thật duy nhất của project; không chứa audio/video dưới dạng base64.
+- Mỗi scene có cueStart/cueEnd, thời điểm bắt đầu/kết thúc, styleId, ảnh và ghi chú.
+- Dữ liệu khởi tạo thủ công/từ SRT, không đánh dấu là đã tạo bằng AI.
+- Không tự động tải model; không gửi dữ liệu người dùng ra dịch vụ ngoài.
+- Không cho phép đường dẫn traversal gây truy cập ngoài thư mục khi sinh đầu ra.
+- File project được lưu atomically; lỗi không làm mất file cũ.
+- Source paths có thể là file tuyệt đối để MVP dễ dùng, nhưng dự án phải hỗ trợ tương đối khi save.
+
+## 4. Chấp nhận V1.0
+
+- Hai tab gốc TTS và Video Editor không bị chỉnh sửa logic.
+- WinForms .NET 8 build Release trên máy hiện tại.
+- SRT hợp lệ tạo đúng số scene và timestamp, SRT lỗi báo rõ.
+- Lưu rồi mở lại project không mất thông tin.
+- Không commit dữ liệu TTS riêng tư, file voice, ảnh, MP4.
+- Luôn kiểm thử từ clean checkout trước khi push.
+
+
+## 5. Kết quả V1.0 (12/10/2026)
+
+- AiVideoStudio/AiVideoProject.cs: JSON schema v1, đọc/kiểm tra SRT, sinh storyboard, lưu file atomically, đường dẫn tương đối.
+- AiVideoStudio/AiVideoStudioControl.cs: giao diện nhập audio/SRT/ảnh, tạo scene, sửa style/ảnh/ghi chú, mở/lưu dự án.
+- AiVideoStudio/AiVideoStudioIntegration.cs: gắn tab mới, không thay tab TTS/Voice/Video Editor cũ.
+- Test headless: 4 cues -> 2 scene, JSON roundtrip, từ chối SRT và scene lỗi.
+- Chưa có AI tự chọn style và chưa có pipeline render đa engine từ tab này.
+- Lưu ý: đường dẫn tuyệt đối của file media chỉ dùng cục bộ; file JSON ưu tiên lưu đường dẫn tương đối đến vị trí project.
