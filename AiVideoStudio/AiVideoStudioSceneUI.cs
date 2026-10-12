@@ -18,6 +18,10 @@ public sealed partial class AiVideoStudioControl
         Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = true
     };
+    private readonly Label trackOverview = new() {
+        Dock = DockStyle.Fill, AutoEllipsis = true,
+        TextAlign = ContentAlignment.MiddleLeft
+    };
     private bool isRebuildingStrip;
 
     private static string Timestamp(long ms) =>
@@ -26,12 +30,14 @@ public sealed partial class AiVideoStudioControl
     private void ConfigureSceneTimeline(TableLayoutPanel view)
     {
         var wrapper = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3
         };
         wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         wrapper.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
         wrapper.Controls.Add(timelineSummary, 0, 0);
         wrapper.Controls.Add(sceneStrip, 0, 1);
+        wrapper.Controls.Add(trackOverview, 0, 2);
         view.Controls.Add(wrapper, 0, 1);
     }
 
@@ -45,6 +51,7 @@ public sealed partial class AiVideoStudioControl
         };
         bar.Controls.Add(increase);
         bar.Controls.Add(decrease);
+        ConfigureComposerButtons(bar);
         bar.Controls.Add(explanation);
         increase.Click += (_, _) => ShiftSceneBoundary(+1);
         decrease.Click += (_, _) => ShiftSceneBoundary(-1);
@@ -75,6 +82,19 @@ public sealed partial class AiVideoStudioControl
         }
     }
 
+    private void UpdateTrackOverview()
+    {
+        string tts = string.IsNullOrEmpty(audioInput.Text)
+            ? "TTS: chưa chọn" : "TTS: " + Path.GetFileName(audioInput.Text);
+        string subtitles = string.IsNullOrEmpty(subtitleInput.Text)
+            ? "SRT: chưa chọn" : "SRT: " +
+              (project.BurnSubtitles ? "CHÈN VÀO VIDEO" : "không chèn");
+        string music = string.IsNullOrEmpty(project.MusicPath)
+            ? "Nhạc nền: tắt" : $"Nhạc nền: {project.MusicVolume:P0}";
+        trackOverview.Text = "TRACK 1 · " + tts + "     TRACK 2 · " +
+                             subtitles + "     TRACK 3 · " + music;
+    }
+
     private void RebuildSceneTimeline()
     {
         if (isRebuildingStrip) return;
@@ -93,6 +113,7 @@ public sealed partial class AiVideoStudioControl
                 ? "Timeline: chưa có cảnh — một TTS tổng, chia thời gian bằng SRT"
                 : $"Timeline hình ảnh: {scenes.Count} cảnh · {Timestamp(total)} · " +
                   $"Audio: {(string.IsNullOrWhiteSpace(audioInput.Text) ? "chưa chọn" : Path.GetFileName(audioInput.Text))}";
+            UpdateTrackOverview();
             foreach (var scene in scenes)
             {
                 int number = scene.Index - 1;

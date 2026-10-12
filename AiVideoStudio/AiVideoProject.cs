@@ -20,6 +20,10 @@ public sealed class AiVideoProject
     public string AudioPath { get; set; } = "";
     public string SubtitlePath { get; set; } = "";
     public string ImageFolder { get; set; } = "";
+    // V2 composer: TTS remains the master audio; these tracks are optional.
+    public string MusicPath { get; set; } = "";
+    public double MusicVolume { get; set; } = 0.12;
+    public bool BurnSubtitles { get; set; } = false;
     public List<AiVideoScene> Scenes { get; set; } = new();
     [JsonIgnore]
     public string FilePath { get; set; } = "";
@@ -270,9 +274,19 @@ public static class AiVideoProjectService
         }
     }
 
+    public static void ValidateComposer(AiVideoProject project)
+    {
+        if (!double.IsFinite(project.MusicVolume) ||
+            project.MusicVolume < 0 || project.MusicVolume > 0.5)
+            throw new InvalidDataException("Âm lượng nhạc nền phải trong khoảng 0–50%.");
+        if (project.BurnSubtitles && string.IsNullOrWhiteSpace(project.SubtitlePath))
+            throw new InvalidDataException("Bật phụ đề cần có file SRT.");
+    }
+
     public static void Save(AiVideoProject project, string targetFile)
     {
         if (project.SchemaVersion != 1) throw new InvalidDataException("Chỉ hỗ trợ project schema v1.");
+        ValidateComposer(project);
         ValidateScenes(project.Scenes);
         var path = Path.GetFullPath(targetFile);
         string root = Path.GetDirectoryName(path) ?? throw new InvalidDataException("Thư mục project không hợp lệ.");
@@ -283,6 +297,7 @@ public static class AiVideoProjectService
         clone.AudioPath = ToRelative(root, clone.AudioPath);
         clone.SubtitlePath = ToRelative(root, clone.SubtitlePath);
         clone.ImageFolder = ToRelative(root, clone.ImageFolder);
+        clone.MusicPath = ToRelative(root, clone.MusicPath);
         foreach (var scene in clone.Scenes)
             scene.ImagePath = ToRelative(root, scene.ImagePath);
         var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -305,11 +320,13 @@ public static class AiVideoProjectService
                       ?? throw new InvalidDataException("JSON project trống.");
         if (project.SchemaVersion != 1) throw new InvalidDataException("Phiên bản JSON chưa hỗ trợ.");
         project.Scenes ??= new();
+        ValidateComposer(project);
         ValidateScenes(project.Scenes);
         string root = Path.GetDirectoryName(path)!;
         project.AudioPath = ToAbsolute(root, project.AudioPath);
         project.SubtitlePath = ToAbsolute(root, project.SubtitlePath);
         project.ImageFolder = ToAbsolute(root, project.ImageFolder);
+        project.MusicPath = ToAbsolute(root, project.MusicPath);
         foreach (var scene in project.Scenes)
             scene.ImagePath = ToAbsolute(root, scene.ImagePath);
         project.FilePath = path;

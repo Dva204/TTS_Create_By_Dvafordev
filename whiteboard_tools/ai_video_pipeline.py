@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-CURRENT_VERSION = "ai-video-render-v1.3.1"
+CURRENT_VERSION = "ai-video-render-v2.0.0-rc1"
 SUPPORTED = {"whiteboard", "layer", "image-motion", "image-story", "text"}
 RESAMPLE = Image.Resampling.LANCZOS
 
@@ -26,10 +26,10 @@ def say(message: str):
     print(message, flush=True)
 
 
-def execute(command: list[str], description: str):
+def execute(command: list[str], description: str, cwd: Path | None = None):
     say("[RUN] " + description)
     completed = subprocess.run(command, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, encoding="utf-8",
+                               stderr=subprocess.STDOUT, cwd=cwd, encoding="utf-8",
                                errors="replace")
     if completed.returncode:
         raise RuntimeError(f"{description} (exit {completed.returncode}):\n" +
@@ -324,12 +324,19 @@ def render_project(args):
         raise ValueError("Choose a valid TTS audio before rendering")
     audio_seconds = probe_seconds(audio)
     project, scenes = load_project(project_file, audio_seconds, args.scene_index)
+    from video_tracks import validate_tracks, create_ass, track_signature
+    music, music_volume, burn_subtitles, subtitle_cues = validate_tracks(
+        project, project_file.parent, audio_seconds)
     width, height, fps = (640, 360, 20) if args.quality == "preview" else (1280, 720, 24)
     export_w, export_h = (640, 360) if args.quality == "preview" else (1920, 1080)
     output = Path(args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     workspace = output.parent / (output.stem + ".ai_video_work")
     workspace.mkdir(exist_ok=True)
+    if args.validate_only:
+        say(f"[VALID] {len(scenes)} scenes, {audio_seconds:.3f}s, "
+            f"music={bool(music)}, subtitles={burn_subtitles}")
+        return
     engine = Path(args.engine).resolve() if args.engine else Path("missing-whiteboard.exe")
     if args.scene_index:
         if args.scene_index < 1 or args.scene_index > len(scenes):
@@ -383,6 +390,7 @@ def render_project(args):
         "quality": args.quality, "width": export_w, "height": export_h,
         "fps": fps, "sceneIndex": args.scene_index,
         "duration": audio_seconds,
+        "tracks": track_signature(project, music, burn_subtitles, subtitle_cues),
     }, sort_keys=True).encode("utf-8")).hexdigest()
     export_stamp = workspace / "export.signature"
     manifest = output.with_suffix(".ai-video-manifest.json")
@@ -412,28 +420,71 @@ def render_project(args):
         mux_seconds = audio_seconds
         audio_args = ["-i", str(audio)]
     filters = f"scale={export_w}:{export_h}:flags=lanczos,format=yuv420p"
+    if burn_subtitles:
+        first_second = work_scenes[0]["start"] if args.scene_index else 0.
+        create_ass(workspace / "subtitles.ass", subtitle_cues,
+                   first_second, first_second + mux_seconds, export_w, export_h)
+        filters += ",ass=subtitles.ass"
+    # Keep narration as the primary audio track; BGM is quiet and looped.
+    audio_source_args = audio_args + (
+        ["-stream_loop", "-1", "-i", str(music)] if music is not None else [])
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-              "-i", str(joined)] + audio_args + [
-              "-map", "0:v:0", "-map", "1:a:0"]
-    tail = ["-c:a", "aac", "-b:a", "192k", "-t", f"{mux_seconds:.5f}",
-            "-movflags", "+faststart", str(output)]
-    if args.quality == "youtube":
-        try:
-            execute(common + ["-vf", filters, "-c:v", "h264_nvenc",
-                              "-preset", "p4", "-cq", "23"] + tail,
-                    "Export Full HD (NVENC)")
-        except RuntimeError:
-            say("[WARN] NVENC unavailable; falling back to libx264")
-            execute(common + ["-vf", filters, "-c:v", "libx264",
-                              "-preset", "veryfast", "-crf", "23"] + tail,
-                    "Export Full HD (CPU)")
+              "-i", str(joined)] + audio_source_args
+    if music:
+        mix = (f"[1:a]aresample=async=1,asetpts=PTS-STARTPTS[voice];"
+               f"[2:a]volume={music_volume:.4f},"
+               f"atrim=duration={mux_seconds:.5f},asetpts=PTS-STARTPTS[bed];"
+               "[voice][bed]amix=inputs=2:duration=first:"
+               "dropout_transition=0:normalize=0[mix]")
+        common += ["-filter_complex", mix, "-map", "0:v:0", "-map", "[mix]"]
     else:
-        execute(common + ["-c:v", "copy"] + tail, "Add TTS narration")
+        common += ["-map", "0:v:0", "-map", "1:a:0"]
+    # Never overwrite a valid previous output until the new MP4 is validated.
+    pending = output.with_name(output.stem + ".rendering.mp4")
+    tail = ["-c:a", "aac", "-b:a", "192k", "-t", f"{mux_seconds:.5f}",
+            "-movflags", "+faststart", str(pending)]
+    try:
+        if args.quality == "youtube":
+            try:
+                execute(common + ["-vf", filters, "-c:v", "h264_nvenc",
+                                  "-preset", "p4", "-cq", "23"] + tail,
+                        "Export Full HD (NVENC)", cwd=workspace)
+            except RuntimeError:
+                say("[WARN] NVENC unavailable; falling back to libx264")
+                execute(common + ["-vf", filters, "-c:v", "libx264",
+                                  "-preset", "veryfast", "-crf", "23"] + tail,
+                        "Export Full HD (CPU)", cwd=workspace)
+        elif burn_subtitles:
+            execute(common + ["-vf", filters, "-c:v", "libx264",
+                              "-preset", "veryfast", "-crf", "23",
+                              "-pix_fmt", "yuv420p"] + tail,
+                    "Preview with burned-in captions", cwd=workspace)
+        else:
+            execute(common + ["-c:v", "copy"] + tail,
+                    "Mux total TTS and optional background music", cwd=workspace)
+        expected = mux_seconds
+        actual = probe_seconds(pending)
+        if abs(expected - actual) > max(0.3, 1 / fps + .05):
+            raise RuntimeError(f"Export duration mismatch: expected {expected:.3f}s, "
+                               f"got {actual:.3f}s")
+        verify = subprocess.run([
+            "ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0", str(pending)
+        ], capture_output=True, text=True, check=True)
+        streams = verify.stdout.split()
+        if "video" not in streams or "audio" not in streams:
+            raise RuntimeError("Export must contain one video and one audio stream")
+        pending.replace(output)
+    finally:
+        pending.unlink(missing_ok=True)
     manifest.write_text(json.dumps({
         "renderer": CURRENT_VERSION, "project": str(project_file),
         "output": str(output), "audioSeconds": audio_seconds,
         "width": export_w, "height": export_h, "fps": fps,
         "selectedScene": args.scene_index or None,
+        "burnSubtitles": burn_subtitles,
+        "backgroundMusic": str(music) if music else None,
+        "musicVolume": music_volume if music else None,
         "scenes": [{"index": s["index"], "style": s["style"],
                     "start": s["start"], "end": s["end"],
                     "frames": scene_frame_count(s, fps),
@@ -450,6 +501,8 @@ def main():
     parser.add_argument("--output", required=True, help="Output MP4")
     parser.add_argument("--quality", choices=["preview", "youtube"], default="preview")
     parser.add_argument("--engine", default="", help="Existing whiteboard.exe")
+    parser.add_argument("--validate-only", action="store_true",
+                        help="Validate scene timings and optional tracks without rendering")
     parser.add_argument("--scene-index", type=int, default=0,
                         help="Preview only one scene with the matching slice of total TTS")
     args = parser.parse_args()

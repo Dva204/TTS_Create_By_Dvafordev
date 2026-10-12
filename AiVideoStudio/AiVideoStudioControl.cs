@@ -46,7 +46,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         Dock = DockStyle.Fill;
         var view = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 4, ColumnCount = 1 };
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 290));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 146));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 174));
         view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         Controls.Add(view);

@@ -181,3 +181,21 @@ Tài liệu: AI_VIDEO_SCENE_WORKFLOW_GUIDE.md.
 - [ ] Nâng cấp timeline nhiều track và waveform nếu cần.
 
 Hướng dẫn: AI_VIDEO_INLINE_PREVIEW_GUIDE.md.
+
+
+## 11. AI Video Studio V2.0 RC — Composer ba track
+
+- [x] TTS tổng luôn là audio chính, tương thích V1.3.
+- [x] Nhạc nền tùy chọn, lặp đến hết video, điều chỉnh âm lượng 0–50%.
+- [x] Bật/tắt phụ đề SRT burn-in bằng FFmpeg libass, đúng mốc SRT.
+- [x] Giao diện Nhạc nền / Phụ đề và trạng thái ba track trên timeline.
+- [x] Nút Kiểm tra dự án trước khi render không tạo video.
+- [x] Xuất MP4 qua file tạm, validate thời lượng/track rồi mới thay file cũ.
+- [x] Test Full HD thật với 6 WebP, 6 SRT, một TTS WAV 19,24 giây + BGM.
+- [x] Test 40 Image Story, 80 SRT, âm thanh giả lập 8 phút 1080p/24fps, 11520 frame, khoảng 110 giây.
+- [x] Test đầu vào nhạc hỏng không làm mất MP4 đã xuất.
+- [ ] Kiểm tra thao tác WinForms bằng chuột trên màn hình thật.
+- [ ] Engine Map/Timeline/Infographic, editor NLE đa track kéo thả tùy ý: chưa triển khai.
+- [ ] Nghiệm thu hiệu năng 40 Whiteboard với TTS thật.
+
+Trạng thái: V2.0 Release Candidate. Hướng dẫn tại AI_VIDEO_STUDIO_V2_RELEASE.md.
