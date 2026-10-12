@@ -94,20 +94,41 @@ public sealed partial class AiVideoStudioControl
             {
                 int number = scene.Index - 1;
                 long duration = scene.EndMs - scene.StartMs;
-                int width = Math.Clamp(82 + (int)(duration / 800), 95, 205);
-                var button = new Button {
-                    Tag = number, Width = width, Height = 35,
-                    Text = $"{scene.Index:00} · {duration / 1000.0:0.0}s",
-                    Margin = new Padding(2, 1, 2, 1),
-                    FlatStyle = FlatStyle.Flat
+                var tile = new Panel {
+                    Tag = number, Width = 158, Height = 111,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    BackColor = SystemColors.Control,
+                    AllowDrop = true,
+                    Margin = new Padding(3, 1, 3, 1)
                 };
-                button.FlatAppearance.BorderSize = 1;
+                var picture = new PictureBox {
+                    Dock = DockStyle.Top, Height = 82,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BackColor = Color.White,
+                    Image = GetThumbnail(scene.ImagePath, 155, 82),
+                    AllowDrop = true
+                };
+                var caption = new Label {
+                    Dock = DockStyle.Fill,
+                    Text = $"{scene.Index:00} · {duration / 1000.0:0.0}s · {scene.StyleId}",
+                    AutoEllipsis = true, TextAlign = ContentAlignment.MiddleCenter,
+                    AllowDrop = true
+                };
+                tile.Controls.Add(caption);
+                tile.Controls.Add(picture);
+                tile.Disposed += (_, _) => {
+                    var old = picture.Image;
+                    picture.Image = null;
+                    old?.Dispose();
+                };
                 var hint = $"{Timestamp(scene.StartMs)} → {Timestamp(scene.EndMs)}\n" +
                            $"{scene.StyleId} | {Path.GetFileName(scene.ImagePath)}\n{scene.Narration}";
                 var tip = new ToolTip();
-                tip.SetToolTip(button, hint);
-                button.Disposed += (_, _) => tip.Dispose();
-                button.Click += (_, _) =>
+                tip.SetToolTip(tile, hint);
+                tip.SetToolTip(picture, hint);
+                tip.SetToolTip(caption, hint);
+                tile.Disposed += (_, _) => tip.Dispose();
+                EventHandler selectScene = (_, _) =>
                 {
                     if (number < storyboardGrid.Rows.Count)
                     {
@@ -118,7 +139,39 @@ public sealed partial class AiVideoStudioControl
                         HighlightSelectedScene();
                     }
                 };
-                sceneStrip.Controls.Add(button);
+                tile.Click += selectScene;
+                picture.Click += selectScene;
+                caption.Click += selectScene;
+                Point? dragStart = null;
+                picture.MouseDown += (_, e) => {
+                    dragStart = e.Button == MouseButtons.Left ? e.Location : null;
+                };
+                picture.MouseMove += (_, e) => {
+                    if (dragStart is not Point point || e.Button != MouseButtons.Left ||
+                        isRebuildingStrip) return;
+                    Size trigger = SystemInformation.DragSize;
+                    if (Math.Abs(e.X - point.X) >= trigger.Width / 2 ||
+                        Math.Abs(e.Y - point.Y) >= trigger.Height / 2)
+                    {
+                        dragStart = null;
+                        picture.DoDragDrop(number, DragDropEffects.Move);
+                    }
+                };
+                picture.MouseUp += (_, _) => dragStart = null;
+                DragEventHandler allowDrop = (_, e) =>
+                    e.Effect = e.Data?.GetDataPresent(typeof(int)) == true
+                        ? DragDropEffects.Move : DragDropEffects.None;
+                DragEventHandler receiveDrop = (_, e) => {
+                    if (e.Data?.GetDataPresent(typeof(int)) == true &&
+                        e.Data.GetData(typeof(int)) is int source)
+                        SwapSceneImages(source, number);
+                };
+                foreach (Control target in new Control[] { tile, picture, caption })
+                {
+                    target.DragEnter += allowDrop;
+                    target.DragDrop += receiveDrop;
+                }
+                sceneStrip.Controls.Add(tile);
             }
             sceneStrip.ResumeLayout();
             HighlightSelectedScene();
@@ -126,16 +179,35 @@ public sealed partial class AiVideoStudioControl
         finally { isRebuildingStrip = false; }
     }
 
+    /// <summary>
+    /// Drag-and-drop changes only illustrations; chronological narration and
+    /// SRT cue boundaries remain untouched.
+    /// </summary>
+    private void SwapSceneImages(int source, int destination)
+    {
+        if (source == destination || source < 0 || destination < 0 ||
+            source >= scenes.Count || destination >= scenes.Count) return;
+        var old = scenes[source].ImagePath;
+        scenes[source].ImagePath = scenes[destination].ImagePath;
+        scenes[destination].ImagePath = old;
+        storyboardGrid.Refresh();
+        RebuildSceneTimeline();
+        ShowSelectedSceneImage();
+        dirty = true;
+        status.Text = $"Đã đổi ảnh của cảnh {source + 1} và {destination + 1}. " +
+                      "Thời gian SRT/TTS giữ nguyên.";
+    }
+
     private void HighlightSelectedScene()
     {
         if (sceneStrip.IsDisposed || isRebuildingStrip) return;
         int selected = storyboardGrid.CurrentRow?.Index ?? -1;
-        foreach (Button button in sceneStrip.Controls.OfType<Button>())
+        foreach (Panel tile in sceneStrip.Controls.OfType<Panel>())
         {
-            bool active = button.Tag is int number && number == selected;
-            button.BackColor = active ? Color.FromArgb(207, 231, 250) : SystemColors.Control;
-            button.FlatAppearance.BorderColor = active ? Color.DodgerBlue : SystemColors.ControlDark;
-            button.ForeColor = active ? Color.MidnightBlue : SystemColors.ControlText;
+            bool active = tile.Tag is int number && number == selected;
+            tile.BackColor = active ? Color.FromArgb(207, 231, 250) : SystemColors.Control;
+            foreach (Label label in tile.Controls.OfType<Label>())
+                label.ForeColor = active ? Color.MidnightBlue : SystemColors.ControlText;
         }
     }
 }

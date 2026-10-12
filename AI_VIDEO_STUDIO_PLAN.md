@@ -161,3 +161,23 @@ không yêu cầu mô hình AI hoặc API để dựng video.
 - [ ] Map/Timeline/Infographic engine riêng (hiện chưa hoàn thiện).
 
 Tài liệu: AI_VIDEO_SCENE_WORKFLOW_GUIDE.md.
+
+
+## 10. V1.4 — Thumbnail + preview ngay trong ứng dụng
+
+Ưu tiên luồng một audio TTS tổng + SRT + bộ ảnh theo số scene.
+
+- [x] Timeline có thumbnail ảnh và chỉ rõ scene, thời lượng, style.
+- [x] Bấm thumbnail để chọn scene tương ứng trong bảng storyboard.
+- [x] Kéo một thumbnail sang thumbnail khác để hoán đổi ảnh,
+      không thay đổi thứ tự audio SRT.
+- [x] Cache thumbnail nhỏ, không giữ khóa file PNG nguồn; dispose khi đóng.
+- [x] Khung xem ảnh nguồn, lời thuyết minh và metadata scene trong tab.
+- [x] Nhúng Windows Media Player ActiveX để play MP4 sau khi render;
+      fallback dùng ứng dụng phát Windows khi thiếu ActiveX.
+- [x] Nút Mở MP4 để phát file xuất trước đó ngay trong tab.
+- [x] Test khởi tạo WinForms STA và 40 ảnh thumbnail, đổi ảnh không lệch SRT.
+- [ ] Nghiệm thu play/pause/seek trên cửa sổ Windows bằng chuột.
+- [ ] Nâng cấp timeline nhiều track và waveform nếu cần.
+
+Hướng dẫn: AI_VIDEO_INLINE_PREVIEW_GUIDE.md.

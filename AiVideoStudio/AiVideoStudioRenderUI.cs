@@ -181,8 +181,8 @@ public sealed partial class AiVideoStudioControl
             if (process.ExitCode == 0)
             {
                 status.Text = "Đã xuất video: " + destination;
-                if (onlyScene > 0 && File.Exists(destination))
-                    Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true });
+                if (File.Exists(destination))
+                    OpenVideoInStudio(destination);
             }
             else
             {

@@ -46,7 +46,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         Dock = DockStyle.Fill;
         var view = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 4, ColumnCount = 1 };
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 290));
-        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+        view.RowStyles.Add(new RowStyle(SizeType.Absolute, 146));
         view.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         view.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
         Controls.Add(view);
@@ -147,7 +147,15 @@ public sealed partial class AiVideoStudioControl : UserControl
 
         ConfigureGrid();
         ConfigureSceneTimeline(view);
-        view.Controls.Add(storyboardGrid, 0, 2);
+        var workspace = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Margin = new Padding(0)
+        };
+        workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
+        workspace.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+        workspace.Controls.Add(storyboardGrid, 0, 0);
+        ConfigureInlinePreview(workspace);
+        view.Controls.Add(workspace, 0, 2);
         view.Controls.Add(status, 0, 3);
         titleInput.TextChanged += (_, _) => dirty = true;
         audioInput.TextChanged += (_, _) => dirty = true;
@@ -156,8 +164,12 @@ public sealed partial class AiVideoStudioControl : UserControl
         storyboardGrid.CellValueChanged += (_, _) => {
             dirty = true;
             RebuildSceneTimeline();
+            ShowSelectedSceneImage();
         };
-        storyboardGrid.SelectionChanged += (_, _) => HighlightSelectedScene();
+        storyboardGrid.SelectionChanged += (_, _) => {
+            HighlightSelectedScene();
+            UpdateSelectedScenePreview();
+        };
         storyboardGrid.CurrentCellDirtyStateChanged += (_, _) => {
             if (storyboardGrid.IsCurrentCellDirty)
                 storyboardGrid.CommitEdit(DataGridViewDataErrorContexts.Commit);
@@ -174,10 +186,13 @@ public sealed partial class AiVideoStudioControl : UserControl
             {
                 scenes[args.RowIndex].ImagePath = picker.FileName;
                 storyboardGrid.Refresh();
+                RebuildSceneTimeline();
+                ShowSelectedSceneImage();
                 dirty = true;
             }
         };
         ResetProject();
+        Disposed += (_, _) => ReleaseInlinePreview();
     }
 
     private sealed record StyleOption(string Id, string Label);
@@ -231,6 +246,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         scenes = new BindingList<AiVideoScene>();
         storyboardGrid.DataSource = scenes;
         RebuildSceneTimeline();
+        ResetSelectedScenePreviewTracking();
         titleInput.Text = project.Title;
         audioInput.Clear(); subtitleInput.Clear(); imageFolderInput.Clear();
         status.Text = "Dự án mới. Import TTS/SRT rồi bấm Tạo storyboard.";
@@ -253,6 +269,7 @@ public sealed partial class AiVideoStudioControl : UserControl
             scenes = new BindingList<AiVideoScene>(items);
             storyboardGrid.DataSource = scenes;
             RebuildSceneTimeline();
+            ResetSelectedScenePreviewTracking();
             dirty = true;
             status.Text = $"Đã tạo {scenes.Count} phân cảnh từ {srt.Count} mục SRT. Chỉnh hiệu ứng, ảnh và ghi chú trước khi lưu.";
         }
@@ -310,6 +327,7 @@ public sealed partial class AiVideoStudioControl : UserControl
             scenes = new BindingList<AiVideoScene>(project.Scenes);
             storyboardGrid.DataSource = scenes;
             RebuildSceneTimeline();
+            ResetSelectedScenePreviewTracking();
             titleInput.Text = project.Title;
             audioInput.Text = project.AudioPath;
             subtitleInput.Text = project.SubtitlePath;
