@@ -61,6 +61,22 @@ public sealed partial class AiVideoStudioControl
         catch (UnauthorizedAccessException) { }
     }
 
+    private void ChooseOutputFolder()
+    {
+        using var picker = new FolderBrowserDialog {
+            Description = "Chọn thư mục lưu video MP4",
+            ShowNewFolderButton = true
+        };
+        if (Directory.Exists(outputFolderInput.Text))
+            picker.SelectedPath = outputFolderInput.Text;
+        else if (Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos)))
+            picker.SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+        UpdateOutputDirectory(picker.SelectedPath);
+        status.Text = "Đã chọn thư mục xuất video: " + outputFolderInput.Text;
+    }
+
     private void OpenOutputFolder()
     {
         try
@@ -110,13 +126,32 @@ public sealed partial class AiVideoStudioControl
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 7);
         inputs.Controls.Add(outputFolderInput, 1, 7);
+        // Keep both folder actions together; selecting the folder also
+        // updates the default directory for the existing MP4 Save dialog.
+        inputs.ColumnStyles[2].SizeType = SizeType.Absolute;
+        inputs.ColumnStyles[2].Width = 206;
+        var outputActions = new TableLayoutPanel {
+            Name = "outputFolderActions", Dock = DockStyle.Fill,
+            ColumnCount = 2, RowCount = 1, Margin = new Padding(0)
+        };
+        outputActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        outputActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        outputActions.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var chooseOutput = new Button {
+            Name = "btnChooseVideoOutputFolder", Text = "Chọn output",
+            Dock = DockStyle.Fill, Margin = new Padding(2),
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+        };
+        chooseOutput.Click += (_, _) => ChooseOutputFolder();
+        outputActions.Controls.Add(chooseOutput, 0, 0);
         var openOutput = new Button {
             Name = "btnOpenVideoOutputFolder", Text = "Mở output",
-            Dock = DockStyle.Fill, Height = 32,
-            Font = new Font("Segoe UI", 9.5f, FontStyle.Bold)
+            Dock = DockStyle.Fill, Margin = new Padding(2),
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold)
         };
         openOutput.Click += (_, _) => OpenOutputFolder();
-        inputs.Controls.Add(openOutput, 2, 7);
+        outputActions.Controls.Add(openOutput, 1, 0);
+        inputs.Controls.Add(outputActions, 2, 7);
         outputFolderInput.Text = ReadOutputDirectory();
 
         // Keep project/save controls at the top; import is the most-used
