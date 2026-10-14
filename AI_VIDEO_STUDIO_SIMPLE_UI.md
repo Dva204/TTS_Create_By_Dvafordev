@@ -1,45 +1,41 @@
-# AI Video Studio — Giao diện cơ bản (không dùng bố cục CapCut)
+# AI Video Studio — Giao diện tối giản
 
-Nhánh: `feature/ai-video-studio`.
+Mặc định mở vào giao diện phục vụ công việc chính: chọn audio TTS / SRT / ảnh, import Scene Plan Claude, chọn thư mục output và xuất video YouTube.
 
-## Thiết kế
+## Màn hình chính (10 nút)
 
-Mục tiêu: dễ nhìn trên laptop và màn hình desktop, đặc biệt với workflow TTS tổng + SRT + ảnh Whiteboard. Không thay đổi scene, project JSON, AI Director, Whiteboard HD hoặc Python render engine.
+- Ba dòng nguồn: **Âm thanh TTS**, **Phụ đề SRT**, **Thư mục ảnh**, mỗi dòng có nút **Chọn...**.
+- Dòng **Thư mục output**: **Chọn output** để chọn nơi lưu MP4 và **Mở output** để xem file trong Explorer.
+- Dòng **Thao tác**: **Import Scene Plan**, **Mở dự án**, **Lưu dự án**, **Tùy chọn**.
+- Góc phải phía trên: nút lớn **XUẤT VIDEO**.
+- Bảng bên dưới: **#**, **SRT từ**, **SRT đến**, **Hiệu ứng**, **Ảnh (nháy đúp để thay)** và **Lời đọc**. Đây là toàn bộ bảng cần dùng để kiểm tra video theo Scene Plan.
 
-### Bố cục hiện tại
+Các nút xem thử, chỉnh ranh giới và cấu hình không còn làm rối màn hình chính. Không có video player nhúng, không có kiểu giao diện CapCut hoặc dải thumbnail.
 
-1. Trên cùng: tên **AI VIDEO STUDIO**, nút xem thử MP4, xem một cảnh, dừng render; nút **XUẤT VIDEO 1080p** riêng ở góc phải.
-2. Phần nguồn: tên project, audio TTS, SRT, thư mục ảnh, tùy chọn chia storyboard, nút Tạo storyboard.
-3. Phần dự án: **Mở project**, **Lưu project**, **Lưu thành...**, **Import Scene Plan**.
-4. Phần phân cảnh: nút điều chỉnh SRT +/- 1 câu, Nhạc nền / Phụ đề, Whiteboard HD.
-5. Phần thư mục output: đường dẫn đã chọn và nút **Chọn output** và **Mở output** (File Explorer).
-6. Phần dưới: **bảng storyboard có thể chỉnh trực tiếp**, hiển thị SRT từ/đến, thời điểm, hiệu ứng, chuyển cảnh, đường dẫn ảnh, lời thuyết minh, ghi chú.
+## Tùy chọn nâng cao (đóng mặc định)
 
-Đã bỏ khu vực video player tích hợp và dải thumbnail khỏi màn hình chính, giúp bảng chiếm không gian. Video xem thử mở bằng trình phát mặc định của Windows sau khi render xong; bản YouTube hoàn tất không tự bật player để tránh gián đoạn. Bạn có thể dùng nút Mở output để truy cập MP4.
+Bấm **Tùy chọn ▾** khi cần dùng:
+- Tên dự án, **Dự án mới**, **Lưu thành...**, **Xem ảnh đã chọn**.
+- Chế độ nhóm SRT, số câu/cảnh, hiệu ứng mặc định, **Tạo storyboard tự động** khi **không có** Scene Plan.
+- **Xem thử MP4**, **Xem cảnh**, **Cảnh +1/-1 câu**, **Nhạc nền/Phụ đề**, **Kiểm tra dự án**, **Whiteboard HD**.
+- Bảng cảnh bổ sung các cột thời gian, chuyển cảnh và ghi chú để kiểm tra chi tiết.
 
-### Sử dụng
+Chức năng nâng cao không bị xóa, chỉ ẩn mặc định. **Dừng render** tự xuất hiện trên thanh trên cùng khi đang render và biến mất khi render kết thúc.
 
-1. Chọn audio TTS tổng, SRT và thư mục ảnh.
-2. Nếu đã có `scene_plan.json` chuẩn từ Claude → bấm **Import Scene Plan**; nếu không có → **Tạo storyboard**.
-3. Kiểm tra bảng phân cảnh, chỉnh từng scene khi cần.
-4. Chọn Whiteboard HD, nhạc nền/phụ đề nếu cần.
-5. Bấm **Chọn output** nếu muốn đổi thư mục lưu mặc định, sau đó **XUẤT VIDEO 1080p**. Chọn tên MP4; vị trí sẽ được hiển thị trong ô Thư mục output và ghi nhớ cho lần mở phần mềm sau.
-6. Bấm **Mở output** để vào thư mục lưu bằng Windows Explorer.
+## Quy trình khuyến nghị
 
-Lưu ý: nút Import đọc **SRT thật** và JSON; nếu thiếu ảnh, báo danh sách thiếu nhưng vẫn có thể nạp timeline; muốn render phải có đủ ảnh và audio.
+1. Chọn Audio tổng, SRT và thư mục ảnh (có thể chọn SRT và ảnh trước nếu chưa có audio).
+2. Chọn thư mục output; ứng dụng ghi nhớ vị trí cho các lần xuất sau.
+3. Bấm **Import Scene Plan**, chọn file JSON Claude; nếu lệch timestamp nhưng văn bản khớp SRT thì ứng dụng hỏi có đồng bộ không.
+4. Kiểm tra các cảnh trong bảng, nháy đúp vào đường dẫn ảnh nếu muốn đổi ảnh.
+5. Bấm **XUẤT VIDEO**; trình Save As mở tại thư mục output đã chọn. Sau khi xong, bấm **Mở output** để tìm MP4.
 
-### Quy tắc output
+## Bảo toàn dữ liệu
 
-- Nút **Chọn output** mở hộp chọn thư mục và cập nhật vị trí lưu mặc định ngay lập tức.
-- Save dialog của Windows mở tại thư mục output được chọn, vẫn cho phép đổi thư mục và tên MP4 mỗi lần xuất để tránh ghi đè nhầm.
-- Ứng dụng ghi nhớ thư mục đã chọn vào cấu hình riêng trong LocalAppData của Windows: `DvaForDev/TTSStudio/last_video_output_dir.txt`. File này nằm ngoài thư mục code và ngoài repo Git.
-- Nếu chưa từng xuất video, dùng mặc định `Videos/DvaForDev AI Videos`; nhấn Mở output sẽ tạo thư mục đó nếu chưa tồn tại.
-- Không di chuyển, sửa, xóa ảnh, audio, SRT hoặc output cũ.
+Giao diện chỉ sắp xếp/ẩn các nút đã có, không xóa chức năng, không tự ghi đè ảnh/audio/SRT hoặc scene JSON. Nút mở dự án được giữ trên màn hình chính. Việc import thay storyboard vẫn hỏi trước khi ghi đè cảnh đang mở. Các project JSON cũ được hỗ trợ.
 
-### Kiểm thử
+## Kiểm thử
 
-- Release build và Python regressions.
-- Smoke WinForms: trường dữ liệu, nút Import/Export/Mở output duy nhất, một bảng scene rộng, preview panel bị ẩn, 40 cảnh và không tạo thumbnail strip.
-- Persist đường dẫn output và khôi phục cấu hình ban đầu sau smoke.
-- Import Scene Plan giữ cue/time/style chính xác.
-- 980×710 vẫn hiển thị bảng phân cảnh và các nút chính.
+- Smoke WinForms: 10 nút trên giao diện chính, panel nâng cao đóng/mở, các cột được hiển thị đúng, output picker và export hiện rõ ở 980x710.
+- Import Scene Plan/SRT và 40 cảnh hoạt động bình thường.
+- Build .NET Release, bộ kiểm thử importer C#, project JSON và Python renderer.

@@ -169,6 +169,7 @@ public sealed partial class AiVideoStudioControl
             youtube.Enabled = false;
             if (scenePreview != null) scenePreview.Enabled = false;
             stop.Enabled = true;
+            if (simpleStudioLayout) stop.Visible = true;
             status.Text = "Đang chuẩn bị render " + quality + "...";
             process.OutputDataReceived += (_, e) =>
             {
@@ -229,6 +230,7 @@ public sealed partial class AiVideoStudioControl
             youtube.Enabled = true;
             if (scenePreview != null) scenePreview.Enabled = true;
             stop.Enabled = false;
+            if (simpleStudioLayout) stop.Visible = false;
         }
     }
 }
