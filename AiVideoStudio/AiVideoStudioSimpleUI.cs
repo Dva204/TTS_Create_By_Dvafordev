@@ -391,6 +391,7 @@ public sealed partial class AiVideoStudioControl
         view.Controls.Remove(oldInputs);
         view.Controls.Add(sources, 0, 1);
         oldInputs.Dispose();
+        ConfigureSceneProgressUi(view);
 
         // Show only meaningful columns by default. All scene state and
         // editing remain in the full model and the advanced table view.

@@ -119,14 +119,14 @@ public sealed partial class AiVideoStudioControl : UserControl
         groupingInput.Items.AddRange(new object[] {
             "Theo số ảnh (khuyên dùng)", "Theo số câu SRT"
         });
-        groupingInput.SelectedIndex = 0;
+        groupingInput.SelectedIndex = 1;
         groupingInput.SelectedIndexChanged += (_, _) => {
             cueCount.Enabled = groupingInput.SelectedIndex == 1;
         };
         options.Controls.Add(groupingInput);
         options.Controls.Add(new Label { Text = "Câu/cảnh", AutoSize = true, Margin = new Padding(8, 9, 6, 0) });
         options.Controls.Add(cueCount);
-        cueCount.Enabled = false;
+        cueCount.Enabled = true;
         options.Controls.Add(new Label { Text = "Kiểu mặc định", AutoSize = true, Margin = new Padding(10, 9, 6, 0) });
         options.Controls.Add(styleInput);
         inputs.Controls.Add(options, 1, 4);

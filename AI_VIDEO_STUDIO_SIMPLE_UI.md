@@ -39,3 +39,14 @@ Giao diện chỉ sắp xếp/ẩn các nút đã có, không xóa chức năng,
 - Smoke WinForms: 10 nút trên giao diện chính, panel nâng cao đóng/mở, các cột được hiển thị đúng, output picker và export hiện rõ ở 980x710.
 - Import Scene Plan/SRT và 40 cảnh hoạt động bình thường.
 - Build .NET Release, bộ kiểm thử importer C#, project JSON và Python renderer.
+
+## Mặc định số câu SRT và tiến trình từng scene (2026-10-14)
+
+- Khi mở Tùy chọn, kiểu nhóm khi tự tạo storyboard mặc định là Theo số câu SRT; ô Câu/cảnh bật sẵn ở giá trị 3 (có thể tự đổi). Chọn Theo số ảnh nếu cần phân đều ảnh. Riêng Import Scene Plan Claude sử dụng đúng cue_from/cue_to của JSON, không thay đổi theo kiểu nhóm thủ công.
+- Bảng phân cảnh có thêm cột Tiến trình. Khi xuất video, mỗi cảnh đi qua: Chưa dựng → Đang dựng... → Đã dựng; video clip cache hiển thị Có sẵn (cache); cảnh thất bại ghi Dừng / lỗi.
+- Thanh tiến trình bên dưới bảng hiển thị số cảnh hoàn tất, ví dụ 12/38 cảnh xong. Sau tất cả clip là bước riêng Đủ 38 cảnh · đang ghép MP4; chỉ khi MP4 có thật mới hiển thị Hoàn tất 38 cảnh · MP4.
+- Tiến trình phản ánh các sự kiện thực của Python renderer, không dùng timer giả hoặc ước lượng thời gian còn lại. Một cảnh Whiteboard có thể mất lâu dù số cảnh xong chưa tăng; dòng scene vẫn thể hiện Đang dựng...
+- Xem thử một scene chỉ cập nhật đúng scene đó; các scene chưa dựng khác không bị đánh dấu xong.
+- Nếu hủy/lỗi, không đánh dấu cảnh đang chờ là đã hoàn thành. Chạy lại sẽ tận dụng được clip cache.
+- Protocol stdout: [SCENE_PROGRESS] start|done|cached n/N scene=ID, [SCENE_PROGRESS] mux N/N, [SCENE_PROGRESS] complete N/N.
+- Smoke test FFmpeg thật với 2 cảnh, render mới và render lại từ cache, cùng bài kiểm thử UI và import 38 cảnh/140 cue.

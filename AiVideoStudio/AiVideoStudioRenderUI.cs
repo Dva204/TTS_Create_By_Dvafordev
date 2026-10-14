@@ -162,9 +162,13 @@ public sealed partial class AiVideoStudioControl
                     log.AppendLine(line);
                     if (log.Length > 8000) log.Remove(0, log.Length - 8000);
                 }
-                SetStatusSafe(line);
+                if (AiVideoSceneRenderProgress.TryParse(line, out _))
+                    UpdateSceneRenderProgressSafe(line);
+                else
+                    SetStatusSafe(line);
             }
             renderProcess = process;
+            StartSceneRenderProgress(onlyScene > 0 ? 1 : project.Scenes.Count, onlyScene);
             preview.Enabled = false;
             youtube.Enabled = false;
             if (scenePreview != null) scenePreview.Enabled = false;
@@ -183,6 +187,7 @@ public sealed partial class AiVideoStudioControl
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             await process.WaitForExitAsync();
+            FinishSceneRenderProgress(process.ExitCode == 0);
             if (process.ExitCode == 0)
             {
                 status.Text = "Đã xuất video: " + destination;
@@ -220,6 +225,7 @@ public sealed partial class AiVideoStudioControl
         }
         catch (Exception ex)
         {
+            FinishSceneRenderProgress(false);
             status.Text = "Render lỗi: " + ex.Message;
             MessageBox.Show(this, ex.Message, "AI Video Studio", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }

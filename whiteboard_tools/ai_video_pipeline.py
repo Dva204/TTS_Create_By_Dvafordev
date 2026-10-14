@@ -397,7 +397,7 @@ def render_project(args):
         work_scenes = scenes
     clips = []
     fingerprints = []
-    for scene in work_scenes:
+    for ordinal, scene in enumerate(work_scenes, 1):
         idx = scene["index"]
         frames = scene_frame_count(scene, fps)
         is_hd_wb = high_fidelity and scene["style"] == "whiteboard"
@@ -418,9 +418,11 @@ def render_project(args):
         if (clip.is_file() and cache.is_file() and
                 cache.read_text(encoding="ascii") == fingerprint):
             say(f"[CACHE] {idx}/{len(scenes)} {scene['style']}")
+            say(f"[SCENE_PROGRESS] cached {ordinal}/{len(work_scenes)} scene={idx}")
         else:
             raw = folder / "raw.mp4"
             say(f"[SCENE] {idx}/{len(scenes)} {scene['style']}")
+            say(f"[SCENE_PROGRESS] start {ordinal}/{len(work_scenes)} scene={idx}")
             if scene["style"] in ("whiteboard", "layer"):
                 render_whiteboard(scene, raw, folder, scene_w, scene_h, fps,
                                   engine, project_file.parent)
@@ -443,7 +445,9 @@ def render_project(args):
                                fade_in=fade, sharpen=scene["whiteboardSharpen"],
                                crf=18 if (is_hd_wb and wb_reveal == "source-mask") else 23)
             cache.write_text(fingerprint, encoding="ascii")
+            say(f"[SCENE_PROGRESS] done {ordinal}/{len(work_scenes)} scene={idx}")
         clips.append(clip)
+    say(f"[SCENE_PROGRESS] mux {len(work_scenes)}/{len(work_scenes)}")
     # Final-export cache: unchanged scenes and identical source audio do not
     # need to be concatenated and remuxed again.
     audio_checksum = digest_file(audio)
@@ -465,6 +469,7 @@ def render_project(args):
             and manifest.is_file() and export_stamp.is_file()
             and export_stamp.read_text(encoding="ascii") == export_signature):
         say(f"[CACHE] Finished MP4 unchanged: {output}")
+        say(f"[SCENE_PROGRESS] complete {len(work_scenes)}/{len(work_scenes)}")
         return
 
     if args.scene_index:
@@ -571,6 +576,7 @@ def render_project(args):
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     export_stamp.write_text(export_signature, encoding="ascii")
     say(f"[DONE] {output} - {len(work_scenes)} scenes, {mux_seconds:.2f}s")
+    say(f"[SCENE_PROGRESS] complete {len(work_scenes)}/{len(work_scenes)}")
 
 
 def main():
