@@ -237,7 +237,7 @@ public sealed partial class AiVideoStudioControl : UserControl
                 dirty = true;
             }
         };
-        BuildCapcutShell(view, inputs);
+        BuildSimpleShell(view, inputs, fileButtons);
         ResetProject();
         Disposed += (_, _) => ReleaseInlinePreview();
     }

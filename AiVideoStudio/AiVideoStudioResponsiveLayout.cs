@@ -16,7 +16,7 @@ public sealed partial class AiVideoStudioControl
 
     private void UpdateStudioLayout()
     {
-        if (workspaceSplit.IsDisposed || workspaceSplit.Width < 340 ||
+        if (simpleStudioLayout || workspaceSplit.IsDisposed || workspaceSplit.Width < 340 ||
             workspaceSplit.Height < 245) return;
 
         // The threshold is based on the Studio viewport, not screen pixels,

@@ -17,10 +17,10 @@ public sealed partial class AiVideoStudioControl
 
     private void ConfigureRenderButtons(FlowLayoutPanel panel)
     {
-        var preview = new Button { Text = "Xem trước MP4", AutoSize = true, Height = 30 };
-        var youtube = new Button { Text = "Xuất YouTube", AutoSize = true, Height = 30 };
-        var scenePreview = new Button { Text = "Xem cảnh đã chọn", AutoSize = true, Height = 30 };
-        var stop = new Button { Text = "Dừng render", AutoSize = true, Height = 30, Enabled = false };
+        var preview = new Button { Name = "btnStudioPreview", Text = "Xem trước MP4", AutoSize = true, Height = 30 };
+        var youtube = new Button { Name = "btnStudioExportYouTube", Text = "Xuất YouTube", AutoSize = true, Height = 30 };
+        var scenePreview = new Button { Name = "btnStudioSelectedScenePreview", Text = "Xem cảnh đã chọn", AutoSize = true, Height = 30 };
+        var stop = new Button { Name = "btnStudioStopRender", Text = "Dừng render", AutoSize = true, Height = 30, Enabled = false };
         panel.Controls.Add(preview);
         panel.Controls.Add(scenePreview);
         panel.Controls.Add(youtube);
@@ -117,8 +117,12 @@ public sealed partial class AiVideoStudioControl
                     quality == "preview" ? "ai_video_preview.mp4" : "ai_video_youtube.mp4",
                 Title = "Chọn vị trí xuất video AI"
             };
+            saveDialog.InitialDirectory = Directory.Exists(outputFolderInput.Text)
+                ? outputFolderInput.Text
+                : Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
             if (saveDialog.ShowDialog(this) != DialogResult.OK) return;
             var destination = Path.GetFullPath(saveDialog.FileName);
+            UpdateOutputDirectory(Path.GetDirectoryName(destination)!);
             string projectCopy = Path.Combine(Path.GetDirectoryName(destination)!,
                 Path.GetFileNameWithoutExtension(destination) + ".ai-video.json");
             if (File.Exists(projectCopy) &&
@@ -181,8 +185,27 @@ public sealed partial class AiVideoStudioControl
             if (process.ExitCode == 0)
             {
                 status.Text = "Đã xuất video: " + destination;
-                if (File.Exists(destination))
-                    OpenVideoInStudio(destination);
+                if (File.Exists(destination) && quality == "preview")
+                {
+                    // The simple layout has no embedded player. Play the
+                    // preview in the user's default Windows video application.
+                    if (simpleStudioLayout)
+                    {
+                        try
+                        {
+                            Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true });
+                        }
+                        catch (System.ComponentModel.Win32Exception)
+                        {
+                            // MP4 was already rendered successfully; a missing
+                            // default video player must not report render failure.
+                            status.Text = "Đã tạo video xem thử: " + destination +
+                                          ". Dùng Mở output để tìm MP4.";
+                        }
+                    }
+                    else
+                        OpenVideoInStudio(destination);
+                }
             }
             else
             {

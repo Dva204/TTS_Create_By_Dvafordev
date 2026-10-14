@@ -108,6 +108,13 @@ public sealed partial class AiVideoStudioControl
 
     private void RebuildSceneTimeline()
     {
+        if (simpleStudioLayout)
+        {
+            // In basic layout the thumbnail timeline is intentionally hidden.
+            // Avoid processing 40+ large illustrations after each grid edit.
+            UpdateTrackOverview();
+            return;
+        }
         if (isRebuildingStrip) return;
         isRebuildingStrip = true;
         try
