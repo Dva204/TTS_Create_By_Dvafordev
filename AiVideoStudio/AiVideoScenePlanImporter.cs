@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 
 namespace TTS_Create_By_DvaForDev.AiVideoStudio;
@@ -32,7 +33,8 @@ public static class AiVideoScenePlanImporter
         IReadOnlyList<string> MissingImages,
         IReadOnlyList<string> Warnings);
 
-    public static ImportPreview Read(string jsonFile, string srtFile, string imageFolder)
+    public static ImportPreview Read(string jsonFile, string srtFile, string imageFolder,
+                                     bool useSrtTimings = false)
     {
         if (!File.Exists(jsonFile)) throw new FileNotFoundException("Không tìm thấy scene_plan.json.", jsonFile);
         if (!Directory.Exists(imageFolder))
@@ -64,8 +66,10 @@ public static class AiVideoScenePlanImporter
             throw new InvalidDataException("scene_count không khớp mảng scenes.");
         if (Has(root, "total_cues") && Integer(root, "total_cues") != cues.Count)
             throw new InvalidDataException("total_cues không khớp file SRT đang chọn.");
+        int correctedTimeFields = 0;
         if (Has(root, "total_duration_s"))
-            MatchTime(root, "total_duration_s", cues[^1].EndMs, "total_duration_s");
+            correctedTimeFields += CheckTime(root, "total_duration_s", cues[^1].EndMs,
+                                             "total_duration_s", useSrtTimings) ? 1 : 0;
 
         // Resolve file names by exact name (case-insensitive on Windows),
         // not by index, to avoid silently attaching the wrong illustration.
@@ -116,12 +120,32 @@ public static class AiVideoScenePlanImporter
             // Match Claude's optional timings against real SRT (never trust JSON
             // timecodes as an independent source of truth). Missing timecodes are
             // allowed for pre-TTS drafts; present values must match.
-            if (Has(item, "start")) MatchTime(item, "start", cues[from-1].StartMs, prefix);
-            if (Has(item, "end")) MatchTime(item, "end", cues[to-1].EndMs, prefix);
-            if (Has(item, "start_ms")) MatchMs(item, "start_ms", cues[from-1].StartMs, prefix);
-            if (Has(item, "end_ms")) MatchMs(item, "end_ms", cues[to-1].EndMs, prefix);
+            if (Has(item, "start"))
+                correctedTimeFields += CheckTime(item, "start", cues[from-1].StartMs,
+                                                 prefix, useSrtTimings) ? 1 : 0;
+            if (Has(item, "end"))
+                correctedTimeFields += CheckTime(item, "end", cues[to-1].EndMs,
+                                                 prefix, useSrtTimings) ? 1 : 0;
+            if (Has(item, "start_ms"))
+                correctedTimeFields += CheckMs(item, "start_ms", cues[from-1].StartMs,
+                                               prefix, useSrtTimings) ? 1 : 0;
+            if (Has(item, "end_ms"))
+                correctedTimeFields += CheckMs(item, "end_ms", cues[to-1].EndMs,
+                                               prefix, useSrtTimings) ? 1 : 0;
             if (Has(item, "duration_s"))
-                MatchTime(item, "duration_s", cues[to-1].EndMs - cues[from-1].StartMs, prefix);
+                correctedTimeFields += CheckTime(item, "duration_s",
+                    cues[to-1].EndMs - cues[from-1].StartMs, prefix, useSrtTimings) ? 1 : 0;
+            if (useSrtTimings)
+            {
+                // Re-align time only when the user's SRT words exactly match
+                // the scene's narration, to prevent silent semantic misalignment.
+                string excerpt = RequiredString(item, "narration_excerpt");
+                string actual = string.Join(" ", cues.Skip(from-1)
+                    .Take(to-from+1).Select(c => c.Text));
+                if (NormalizeNarration(excerpt) != NormalizeNarration(actual))
+                    throw new InvalidDataException(
+                        $"{prefix}: lời đọc khác SRT, không thể tự đồng bộ thời gian an toàn.");
+            }
             string imagePath = byName.TryGetValue(filename, out string? existing)
                 ? existing : Path.Combine(imageFolder, filename);
             if (existing is null) missing.Add(filename);
@@ -147,6 +171,10 @@ public static class AiVideoScenePlanImporter
         if (nextCue != cues.Count + 1)
             throw new InvalidDataException($"Scene Plan chưa phủ hết SRT: dừng ở cue {nextCue-1}/{cues.Count}.");
         AiVideoProjectService.ValidateScenes(output);
+        if (correctedTimeFields > 0)
+            warnings.Add($"Đã đối chiếu {count} cảnh và dùng thời gian từ SRT thật " +
+                         $"thay cho {correctedTimeFields} mốc JSON không khớp. " +
+                         "File JSON gốc KHÔNG bị sửa.");
         if (missing.Count > 0)
             warnings.Add($"Chưa có {missing.Count}/{count} ảnh: " +
                 string.Join(", ", missing.Take(12)) + (missing.Count > 12 ? "..." : "") +
@@ -180,18 +208,44 @@ public static class AiVideoScenePlanImporter
             throw new InvalidDataException("Trường " + key + " phải là số nguyên.");
         return result;
     }
-    private static void MatchTime(JsonElement item, string key, long expectedMs, string where)
+    // Punctuation/whitespace do not change the scene's spoken meaning.
+    // Keep all letters and digits (including international accents) to avoid
+    // accidentally aligning the plan for a different script.
+    private static string NormalizeNarration(string value)
     {
-        if (!item.TryGetProperty(key, out var val) ||
-            val.ValueKind != JsonValueKind.Number || !val.TryGetDouble(out double seconds) ||
-            !double.IsFinite(seconds) || Math.Abs(seconds*1000.0 - expectedMs) > TimeToleranceMs)
-            throw new InvalidDataException($"{where}: {key} lệch so với SRT thật ({expectedMs} ms).");
+        var result = new StringBuilder(value.Length);
+        foreach (char ch in value.Normalize(NormalizationForm.FormKC).ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(ch))
+                result.Append(ch);
+        }
+        return result.ToString();
     }
-    private static void MatchMs(JsonElement item, string key, long expectedMs, string where)
+
+    private static bool CheckTime(JsonElement item, string key, long expectedMs,
+                                  string where, bool useSrtTimings)
     {
-        if (!item.TryGetProperty(key, out var val) ||
-            val.ValueKind != JsonValueKind.Number || !val.TryGetInt64(out long ms) ||
-            Math.Abs(ms - expectedMs) > TimeToleranceMs)
-            throw new InvalidDataException($"{where}: {key} lệch so với SRT thật ({expectedMs} ms).");
+        if (!item.TryGetProperty(key, out var value) ||
+            value.ValueKind != JsonValueKind.Number ||
+            !value.TryGetDouble(out double seconds) || !double.IsFinite(seconds))
+            throw new InvalidDataException($"{where}: {key} phải là số giây hợp lệ.");
+        bool differs = Math.Abs(seconds * 1000.0 - expectedMs) > TimeToleranceMs;
+        if (differs && !useSrtTimings)
+            throw new InvalidDataException(
+                $"{where}: {key} lệch so với SRT thật ({expectedMs} ms).");
+        return differs;
+    }
+
+    private static bool CheckMs(JsonElement item, string key, long expectedMs,
+                                string where, bool useSrtTimings)
+    {
+        if (!item.TryGetProperty(key, out var value) ||
+            value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out long ms))
+            throw new InvalidDataException($"{where}: {key} phải là số mili-giây nguyên.");
+        bool differs = Math.Abs(ms - expectedMs) > TimeToleranceMs;
+        if (differs && !useSrtTimings)
+            throw new InvalidDataException(
+                $"{where}: {key} lệch so với SRT thật ({expectedMs} ms).");
+        return differs;
     }
 }

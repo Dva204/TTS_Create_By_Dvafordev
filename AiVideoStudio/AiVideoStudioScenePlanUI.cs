@@ -31,8 +31,50 @@ public sealed partial class AiVideoStudioControl
         try
         {
             // All validation occurs before touching the current storyboard.
-            var preview = AiVideoScenePlanImporter.Read(
-                dialog.FileName, subtitleInput.Text, imageFolderInput.Text);
+            AiVideoScenePlanImporter.ImportPreview preview;
+            try
+            {
+                preview = AiVideoScenePlanImporter.Read(
+                    dialog.FileName, subtitleInput.Text, imageFolderInput.Text);
+            }
+            catch (InvalidDataException)
+            {
+                // A Claude plan may have imprecise timing while every cue and
+                // spoken word matches the real SRT. Offer safe explicit repair.
+                // Never rewrite the user's JSON or silently accept new narration.
+                AiVideoScenePlanImporter.ImportPreview? realigned = null;
+                try
+                {
+                    realigned = AiVideoScenePlanImporter.Read(
+                        dialog.FileName, subtitleInput.Text, imageFolderInput.Text,
+                        useSrtTimings: true);
+                }
+                catch (InvalidDataException alignmentError)
+                {
+                    // A genuinely incompatible cue range or transcript cannot
+                    // be automatically repaired, and must never change scenes.
+                    throw new InvalidDataException(
+                        "Không thể tự đồng bộ Scene Plan vì dữ liệu chưa khớp SRT: " +
+                        alignmentError.Message, alignmentError);
+                }
+
+                if (!realigned.Warnings.Any(w => w.Contains(
+                        "mốc JSON không khớp", StringComparison.Ordinal)))
+                    throw new InvalidDataException(
+                        "Scene Plan không tương thích với SRT. Không có mốc " +
+                        "thời gian nào có thể tự đồng bộ an toàn.");
+
+                var answer = MessageBox.Show(this,
+                    "Scene Plan có mốc thời gian lệch so với file SRT đang chọn.\n\n" +
+                    "Phần mềm đã đối chiếu lời đọc từng cảnh với SRT: KHỚP.\n" +
+                    "Có thể lấy thời gian CHÍNH XÁC từ SRT cho storyboard " +
+                    "(không thay đổi thứ tự 38 ảnh, không sửa JSON gốc).\n\n" +
+                    "Bạn muốn tự đồng bộ thời gian theo SRT rồi tiếp tục import?",
+                    "Đồng bộ Scene Plan theo SRT thật",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (answer != DialogResult.Yes) return;
+                preview = realigned;
+            }
 
             string warnings = preview.Warnings.Count == 0
                 ? "Tất cả ảnh đã có trong thư mục."
@@ -55,7 +97,8 @@ public sealed partial class AiVideoStudioControl
                           $"thiếu {preview.MissingImages.Count} ảnh. Hãy Lưu project để giữ kết quả.";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
-                                   System.Text.Json.JsonException or ArgumentException)
+                                   System.Text.Json.JsonException or ArgumentException or
+                                   InvalidDataException or FormatException or OverflowException)
         {
             MessageBox.Show(this,
                 "Không nhập Scene Plan. Storyboard hiện tại vẫn được giữ nguyên.\n\n" + ex.Message,

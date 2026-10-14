@@ -62,3 +62,20 @@ Hạn chế:
 - Đã kiểm thử 13 trường hợp JSON lỗi: cue bị nhảy/chồng/vượt giới hạn, sai duration/tổng, sai style, tên ảnh trùng, path traversal...
 - WinForms: nhập hai cảnh vào bảng và timeline, từ chối JSON lỗi mà không mất scene.
 - Đã kiểm thử C# serialize project và các test renderer hiện có.
+
+## Sửa lỗi lệch thời gian khi import Scene Plan (2026-10-14)
+
+Nếu timestamp của JSON Claude không khớp SRT thực, importer hiện kiểm tra lại toàn bộ narration_excerpt theo cue_from/cue_to của từng cảnh.
+Nếu lời đọc từng cảnh KHỚP chính xác sau chuẩn hóa dấu câu, hoa thường, ứng dụng hỏi người dùng có muốn đồng bộ timestamp theo SRT không.
+Chỉ khi người dùng đồng ý, phần mềm lấy thời gian từ SRT để tạo storyboard, giữ nguyên ảnh, cue và style; JSON gốc và SRT không bị sửa.
+Nếu lời đọc khác SRT, cue thiếu/trùng, hoặc JSON hỏng, ứng dụng từ chối và giữ storyboard hiện tại. InvalidDataException được xử lý bằng MessageBox của ứng dụng, không bật lỗi Windows chưa xử lý.
+
+### Đã kiểm tra bằng SRT thật của Zuschauereffekt
+
+- JSON gốc: C:\Users\Admin\Downloads\scene_plan_zuschauereffekt.json (601.559 giây).
+- JSON đã sửa: C:\Users\Admin\Downloads\scene_plan_zuschauereffekt_srt_synced.json (599.599 giây).
+- SRT gốc: D:\TestTTS\TTS Create By DvaForDev\TestOutput\000_Full_Audio_subtitles.srt.
+- Thư mục ảnh: C:\Users\Admin\Downloads\img_flow_png (001.png đến 038.png).
+- 140 cue khớp chính xác với narration_excerpt của 38/38 cảnh. 38 ảnh PNG đều có mặt.
+- Smoke C# importer: bản JSON đã đồng bộ nhập strict thành công, bản JSON gốc căn lại bằng SRT cho timeline tương đương, giả lập văn bản sai bị từ chối.
+- SRT không thay cho kiểm tra audio thực: khi xuất video, vẫn cần xác nhận WAV/MP3 khớp SRT.
