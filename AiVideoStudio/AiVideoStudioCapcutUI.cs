@@ -98,6 +98,7 @@ public sealed partial class AiVideoStudioControl
         };
         toolbar.Controls.Add(capcutProjectTitle);
         toolbar.Controls.Add(StudioAction("Nguồn TTS / SRT / Ảnh", ToggleCapcutSources));
+        toolbar.Controls.Add(StudioAction("Import Scene Plan (Claude)", ImportScenePlan));
         toolbar.Controls.Add(StudioAction("Tạo storyboard", GenerateStoryboard));
         toolbar.Controls.Add(StudioAction("Mở dự án", OpenProject));
         toolbar.Controls.Add(StudioAction("Lưu", () => SaveProject()));
