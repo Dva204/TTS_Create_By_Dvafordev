@@ -189,7 +189,7 @@ public partial class Form1 : Form
 
     private async void Form1_Load(object? sender, EventArgs e)
     {
-        // Optional local Vietnamese zero-shot clone; keep existing engines.
+        // Optional local VieNeu TTS engine. Existing engines remain unchanged.
         if (!engineComboBox.Items.Contains("vieneu_v3_turbo"))
             engineComboBox.Items.Add("vieneu_v3_turbo");
 
@@ -201,6 +201,34 @@ public partial class Form1 : Form
         languageComboBox.Items.Clear();
         languageComboBox.Items.AddRange(friendlyLangs);
         languageComboBox.SelectedItem = "Tiếng Việt (vi)";
+
+        // Vietnamese voice cloning uses the local VieNeu engine by default.
+        if (engineComboBox.Items.Contains("vieneu_v3_turbo"))
+        {
+            engineComboBox.SelectedItem = "vieneu_v3_turbo";
+            numSimilarity.Value = 65;
+        }
+
+        languageComboBox.SelectedIndexChanged += (s, ev) =>
+        {
+            if (languageComboBox.SelectedItem?.ToString()?.Contains("(vi)") == true)
+            {
+                // Never override an explicitly selected VieNeu cloning engine.
+                // Keep the explicitly selected engine; language must not override it.
+            }
+        };
+
+        // VieNeu currently synthesizes Vietnamese only. Keep the language in sync
+        // when users switch engines, without changing language for other engines.
+        engineComboBox.SelectedIndexChanged += (s, ev) =>
+        {
+            if (engineComboBox.SelectedItem?.ToString() == "vieneu_v3_turbo")
+            {
+                languageComboBox.SelectedItem = "Tiếng Việt (vi)";
+                numSimilarity.Value = 65; // Tested VieNeu C profile; adjustable in UI.
+            }
+        };
+
 
         if (Controls.Find("cmbNewVoiceLanguage", true).FirstOrDefault() is ComboBox cmbNewLang)
         {

@@ -104,6 +104,7 @@ class VieNeuTurboEngine(TtsEngine):
                 "text": text,
                 "reference": str(reference.resolve()),
                 "output": str(output.resolve()),
+                "temperature": float(settings.temperature),
             }
             try:
                 self._worker.stdin.write(json.dumps(payload, ensure_ascii=False)+"\n")

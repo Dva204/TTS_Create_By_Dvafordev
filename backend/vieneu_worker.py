@@ -9,6 +9,9 @@ import sys
 import traceback
 from pathlib import Path
 
+sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+
 PREFIX = "@VIENEU_RESULT@"
 
 def respond(value: dict) -> None:
@@ -73,6 +76,7 @@ def main() -> None:
             if task.get("action") != "generate":
                 raise ValueError("Unsupported VieNeu worker operation.")
             text = str(task.get("text") or "").strip()
+            text = text.encode("utf-8", errors="replace").decode("utf-8")
             reference = Path(str(task["reference"])).resolve(strict=True)
             output = Path(str(task["output"])).resolve()
             if not text or len(text) > 5000:
@@ -87,8 +91,11 @@ def main() -> None:
                 if model is None:
                     from vieneu import Vieneu
                     _prepare_windows_onnx_cache()
-                    model = Vieneu(backend="onnx")
-                wav = model.infer(text=text, ref_audio=str(reference), denoise=True)
+                    model = Vieneu(mode="v3turbo", backend="onnx")
+                temperature = float(task.get("temperature", 0.65))
+                if not 0.1 <= temperature <= 1.5:
+                    raise ValueError("VieNeu temperature must be 0.1 to 1.5")
+                wav = model.infer(text=text, ref_audio=str(reference), temperature=temperature)
                 model.save(wav, str(output))
             if not output.is_file() or output.stat().st_size < 44:
                 raise RuntimeError("VieNeu did not produce a valid audio file.")
