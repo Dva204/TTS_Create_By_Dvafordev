@@ -13,28 +13,34 @@ from models.tts import TtsGenerationSettings
 
 
 class JobManager:
-    def __init__(self, root: Path, engine: TtsEngine, voices: VoiceStore) -> None:
-        self.root, self.engine, self.voices = root, engine, voices
+    def __init__(self, root: Path, engine: TtsEngine | dict[str, TtsEngine], voices: VoiceStore) -> None:
+        self.engines = engine if isinstance(engine, dict) else {engine.name: engine}
+        self.root, self.engine, self.voices = root, next(iter(self.engines.values())), voices
         root.mkdir(parents=True, exist_ok=True)
         self.jobs: dict[str, dict[str, Any]] = {}
         self.tasks: dict[str, asyncio.Task] = {}
         self.queue_lock = asyncio.Lock()
 
-    def create(self, text: str, voice_id: str, language: str, settings: TtsGenerationSettings) -> dict:
+    def create(self, text: str, voice_id: str, language: str, settings: TtsGenerationSettings,
+               engine_name: str | None = None) -> dict:
         job_id = uuid.uuid4().hex
         job = {"id": job_id, "status": "queued", "error": None, "audio_url": None, "created_at": datetime.now(timezone.utc).isoformat()}
         self.jobs[job_id] = job
-        self.tasks[job_id] = asyncio.create_task(self._run(job_id, text, voice_id, language, settings))
+        self.tasks[job_id] = asyncio.create_task(
+            self._run(job_id, text, voice_id, language, settings, engine_name)
+        )
         return job
 
-    async def _run(self, job_id: str, text: str, voice_id: str, language: str, settings: TtsGenerationSettings) -> None:
+    async def _run(self, job_id: str, text: str, voice_id: str, language: str,
+                   settings: TtsGenerationSettings, engine_name: str | None = None) -> None:
         job = self.jobs[job_id]
         try:
             async with self.queue_lock:
                 job["status"] = "running"
                 output = self.root / f"{job_id}.wav"
                 reference = self.voices.reference(voice_id)
-                await asyncio.to_thread(self.engine.generate, text, language, reference, output, settings)
+                selected = self.engines.get(engine_name or "", self.engine)
+                await asyncio.to_thread(selected.generate, text, language, reference, output, settings)
                 
                 # Post-processing (Speed and Speaker Boost)
                 filters = []
@@ -49,7 +55,8 @@ class JobManager:
                     args = [ffmpeg, "-y", "-i", str(output)]
                     if filters:
                         args.extend(["-af", ",".join(filters)])
-                    args.extend(["-ar", "24000", "-c:a", "pcm_s16le", str(temp_out)])
+                    out_rate = "48000" if selected.name == "vieneu_v3_turbo" else "24000"
+                    args.extend(["-ar", out_rate, "-c:a", "pcm_s16le", str(temp_out)])
                     
                     def _process():
                         subprocess.run(

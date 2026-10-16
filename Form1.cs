@@ -189,6 +189,10 @@ public partial class Form1 : Form
 
     private async void Form1_Load(object? sender, EventArgs e)
     {
+        // Optional local Vietnamese zero-shot clone; keep existing engines.
+        if (!engineComboBox.Items.Contains("vieneu_v3_turbo"))
+            engineComboBox.Items.Add("vieneu_v3_turbo");
+
         // Designer already populated engine and language lists.
         if (engineComboBox.Items.Count > 0)
             engineComboBox.SelectedIndex = 0;

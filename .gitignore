@@ -49,3 +49,7 @@ obj/
 # TTS Backend Data Output
 backend/data/jobs/
 backend/data/voices/
+
+# Optional isolated CPU VieNeu environment (do not commit model/dependencies)
+backend/.venv-vieneu/
+backend/data/logs/

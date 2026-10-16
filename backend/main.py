@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from engines.chatterbox import ChatterboxMultilingualEngine
+from engines.vieneu_engine import VieNeuTurboEngine
 from services.job_manager import JobManager
 from services.voice_store import VoiceStore
 from models.tts import GenerateRequest, TtsGenerationSettings
@@ -17,14 +18,25 @@ BASE = Path(__file__).resolve().parent
 DATA = BASE / "data"
 voices = VoiceStore(DATA / "voices")
 engine = ChatterboxMultilingualEngine()
-jobs = JobManager(DATA / "jobs", engine, voices)
+vieneu = VieNeuTurboEngine()
+engines = {engine.name: engine, vieneu.name: vieneu}
+jobs = JobManager(DATA / "jobs", engines, voices)
 app = FastAPI(title="Local AI TTS Studio", version="1.0.0")
 
 
 @app.get("/api/health")
 def health():
     ready, detail = engine.available
-    return {"status": "ok", "engine": engine.name, "ready": ready, "detail": detail}
+    vn_ready, vn_detail = vieneu.available
+    return {
+        "status": "ok", "engine": engine.name,
+        "ready": ready or vn_ready,
+        "detail": None if (ready or vn_ready) else (detail or vn_detail),
+        "engines": {
+            engine.name: {"ready": ready, "detail": detail},
+            vieneu.name: {"ready": vn_ready, "detail": vn_detail},
+        },
+    }
 
 
 @app.get("/api/system")
@@ -37,7 +49,7 @@ def system_info():
     except Exception:
         pass
     return {"platform": platform.platform(), "python": sys.version.split()[0], "cuda_available": cuda, "gpu_name": gpu,
-            "ffmpeg": shutil.which("ffmpeg") or "not found", "engines": [engine.name]}
+            "ffmpeg": shutil.which("ffmpeg") or "not found", "engines": list(engines)}
 
 
 @app.get("/api/voices")
@@ -108,11 +120,17 @@ async def preview_voice(voice_id: str):
     if not voice:
         raise HTTPException(404, "Voice not found.")
     
-    # We use a default text for preview
-    text = "Hello, this is a preview of my voice. I hope you like it!"
-    language = voice.get("language") or "en"
+    language = (voice.get("language") or "en").strip().lower()
+    if "(" in language and ")" in language:
+        language = language[language.rfind("(")+1:language.rfind(")")]
+    if language in ("vi", "vi-vn", "vietnamese") and vieneu.available[0]:
+        text = "Xin chào, đây là bản nghe thử giọng nói tiếng Việt của tôi."
+        selected = vieneu
+    else:
+        text = "Hello, this is a preview of my voice. I hope you like it!"
+        selected = engine
     
-    ready, detail = engine.available
+    ready, detail = selected.available
     if not ready:
         raise HTTPException(503, detail)
     try:
@@ -120,7 +138,7 @@ async def preview_voice(voice_id: str):
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
     settings = TtsGenerationSettings()
-    return jobs.create(text, voice_id, language, settings)
+    return jobs.create(text, voice_id, language, settings, engine_name=selected.name)
 
 
 @app.delete("/api/voices/{voice_id}", status_code=204)
@@ -134,16 +152,24 @@ def delete_voice(voice_id: str):
 
 @app.post("/api/tts/generate", status_code=202)
 async def generate(request: GenerateRequest):
-    if request.engine != engine.name:
+    selected = engines.get(request.engine)
+    if selected is None:
         raise HTTPException(400, f"Unknown engine: {request.engine}")
-    ready, detail = engine.available
+    if selected.name == vieneu.name:
+        lang = (request.language or "").strip().lower()
+        if "(" in lang and ")" in lang:
+            lang = lang[lang.rfind("(")+1:lang.rfind(")")]
+        if lang not in ("vi", "vi-vn", "vietnamese"):
+            raise HTTPException(400, "VieNeu v3 Turbo chỉ hỗ trợ tiếng Việt (vi).")
+    ready, detail = selected.available
     if not ready:
         raise HTTPException(503, detail)
     try:
         voices.reference(request.voice_id)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(404, str(exc)) from exc
-    return jobs.create(request.text.strip(), request.voice_id, request.language, request.settings)
+    return jobs.create(request.text.strip(), request.voice_id, request.language,
+                       request.settings, engine_name=selected.name)
 
 
 @app.get("/api/jobs/{job_id}")
