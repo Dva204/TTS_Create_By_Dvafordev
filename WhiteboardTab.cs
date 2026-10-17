@@ -82,13 +82,61 @@ public partial class Form1
         var advancedRender = new Button { Text = "Thiết lập nâng cao...", AutoSize = true };
         advancedRender.Click += (_, _) => renderOptions.Edit(this);
         settingActions.Controls.Add(advancedRender);
+        var shareSettings = new Button { Text = "Gửi sang AI Video Studio", AutoSize = true };
+        shareSettings.Click += (_, _) =>
+        {
+            if (MessageBox.Show(this,
+                "Lưu cấu hình Whiteboard hiện tại để AI Video Studio có thể áp dụng?",
+                "Chia sẻ cấu hình", MessageBoxButtons.YesNo, MessageBoxIcon.Question)
+                != DialogResult.Yes) return;
+            try
+            {
+                renderOptions.SaveSharedPreset();
+                MessageBox.Show(this,
+                    "Đã lưu cấu hình dùng chung. Sang AI Video Studio và bấm 'Nhận cấu hình Whiteboard'.",
+                    "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Lỗi lưu cấu hình"); }
+        };
+        settingActions.Controls.Add(shareSettings);
+
         var status = new Label { Text = "Kết xuất trên máy, không bắt buộc có TTS.", Dock = DockStyle.Fill, AutoSize = true };
         layout.Controls.Add(status, 1, 6);
         var clearList = new Button { Text = "Xóa danh sách / Việc mới", AutoSize = true, Dock = DockStyle.Right, Margin = new Padding(3, 4, 3, 4) };
         layout.Controls.Add(clearList, 2, 6);
-        var log = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-        layout.Controls.Add(log, 0, 7);
-        layout.SetColumnSpan(log, 3);
+        // Keep process diagnostics off the main canvas, while retaining them for errors.
+        var preview = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.Black };
+        var player = new WhiteboardVideoPlayer();
+        var placeholder = new Label {
+            Dock = DockStyle.Fill, Text = "Video sau khi tạo sẽ phát tại đây",
+            ForeColor = System.Drawing.Color.White,
+            TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+            BackColor = System.Drawing.Color.FromArgb(32, 35, 40)
+        };
+        preview.Controls.Add(placeholder);
+        layout.Controls.Add(preview, 0, 7);
+        layout.SetColumnSpan(preview, 3);
+        void ShowVideo(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return;
+                if (!preview.Controls.Contains(player))
+                {
+                    preview.Controls.Clear();
+                    preview.Controls.Add(player);
+                }
+                player.LoadVideo(path);
+            }
+            catch (Exception ex)
+            {
+                preview.Controls.Clear();
+                preview.Controls.Add(placeholder);
+                status.Text = "Không thể phát video trong ứng dụng: " + ex.Message;
+            }
+        }
+        // Diagnostics are stored without occupying the video player.
+        var log = new TextBox { Multiline = true, ReadOnly = true, Visible = false };
 
         clearList.Click += (_, _) =>
         {
@@ -104,6 +152,9 @@ public partial class Form1
             strokes.SelectedIndex = 1;
             animations.SelectedIndex = 0;
             log.Clear();
+            try { player.StopVideo(); } catch { }
+            preview.Controls.Clear();
+            preview.Controls.Add(placeholder);
             status.Text = "Sẵn sàng cho công việc mới. File cũ vẫn được giữ.";
         };
 
@@ -218,11 +269,12 @@ public partial class Form1
                     File.Delete(rawVideo);
                 }
                 status.Text = "Hoàn thành: " + destination;
+                ShowVideo(destination);
             }
             catch (Exception ex)
             {
                 status.Text = "Lỗi: " + ex.Message;
-                MessageBox.Show(this, ex.Message, "Whiteboard AI", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, ex.Message + Environment.NewLine + log.Text[^Math.Min(log.TextLength, 1400)..], "Whiteboard AI", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally { start.Enabled = true; clearList.Enabled = true; }
         };

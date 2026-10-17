@@ -144,7 +144,7 @@ public sealed partial class AiVideoStudioControl
         view.RowStyles[0].SizeType = SizeType.Absolute;
         view.RowStyles[0].Height = 63;
         view.RowStyles[1].SizeType = SizeType.Absolute;
-        view.RowStyles[1].Height = 303;
+        view.RowStyles[1].Height = 337;
         view.RowStyles[2].SizeType = SizeType.Percent;
         view.RowStyles[2].Height = 100;
         view.RowStyles[3].SizeType = SizeType.Absolute;
@@ -199,7 +199,7 @@ public sealed partial class AiVideoStudioControl
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 216));
-        foreach (int height in new[] {37, 37, 37, 37, 142, 0})
+        foreach (int height in new[] {37, 37, 37, 37, 176, 0})
             sources.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
 
         void SourceRow(int row, string label, TextBox text, Button browse)
@@ -331,7 +331,7 @@ public sealed partial class AiVideoStudioControl
             Padding = new Padding(8, 11, 4, 1)
         };
         var whiteboardActions = new TableLayoutPanel {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3,
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4,
             Padding = new Padding(3, 2, 3, 0)
         };
         whiteboardActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 85));
@@ -339,6 +339,7 @@ public sealed partial class AiVideoStudioControl
         whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 33));
         var strokePicker = new ComboBox {
             Name = "cmbStudioStrokeDetail", Dock = DockStyle.Fill,
             DropDownStyle = ComboBoxStyle.DropDownList,
@@ -391,6 +392,33 @@ public sealed partial class AiVideoStudioControl
         };
         whiteboardMore.Click += (_, _) => { if (project.WhiteboardOptions.Edit(this)) dirty = true; };
         whiteboardActions.Controls.Add(whiteboardMore, 1, 2);
+        var receiveSettings = new Button {
+            Text = "Nhận cấu hình Whiteboard", AutoSize = true, Height = 27
+        };
+        receiveSettings.Click += (_, _) =>
+        {
+            try
+            {
+                var incoming = WhiteboardRenderOptions.LoadSharedPreset();
+                if (incoming is null)
+                {
+                    MessageBox.Show(this, "Chưa có cấu hình dùng chung. Hãy lưu từ tab Whiteboard AI trước.",
+                        "Chưa có cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (MessageBox.Show(this,
+                    "Áp dụng cấu hình Whiteboard đã lưu vào dự án video hiện tại?",
+                    "Áp dụng cấu hình", MessageBoxButtons.YesNo, MessageBoxIcon.Question)
+                    != DialogResult.Yes) return;
+                project.WhiteboardOptions = incoming;
+                dirty = true;
+                status.Text = "Đã nhận cấu hình Whiteboard. Nhấn Lưu dự án để giữ thiết lập.";
+            }
+            catch (Exception ex) { MessageBox.Show(this, ex.Message, "Lỗi nạp cấu hình"); }
+        };
+        whiteboardActions.Controls.Add(receiveSettings, 0, 3);
+        whiteboardActions.SetColumnSpan(receiveSettings, 2);
+
         whiteboardPanel.Controls.Add(whiteboardActions);
         actionArea.Controls.Add(whiteboardPanel, 1, 0);
         sources.Controls.Add(actionArea, 1, 4);
@@ -487,7 +515,7 @@ public sealed partial class AiVideoStudioControl
             {
                 advanced.Visible = show;
                 sources.RowStyles[5].Height = show ? 118 : 0;
-                view.RowStyles[1].Height = show ? 429 : 303;
+                view.RowStyles[1].Height = show ? 463 : 337;
                 advancedButton.Text = show ? "Ẩn tùy chọn ▴" : "Tùy chọn ▾";
                 storyboardGrid.Columns.Cast<DataGridViewColumn>()
                     .First(c => c.DataPropertyName == nameof(AiVideoScene.StartMs)).Visible = show;

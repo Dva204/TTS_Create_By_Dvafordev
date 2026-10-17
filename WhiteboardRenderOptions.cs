@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Text.Json;
+using System.IO;
 
 namespace TTS_Create_By_DvaForDev;
 
@@ -20,6 +22,25 @@ public sealed class WhiteboardRenderOptions
     public int LineartSnapThreshold { get; set; } = 96;
     public bool LineartSnap { get; set; } = true;
     public string PreprocessMode { get; set; } = "edges";
+
+    // Shared on this machine, independently of individual AI Video projects.
+    public static string SharedPresetPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "DvaForDev", "whiteboard-shared-preset.json");
+
+    public void SaveSharedPreset()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SharedPresetPath)!);
+        File.WriteAllText(SharedPresetPath, JsonSerializer.Serialize(this,
+            new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    public static WhiteboardRenderOptions? LoadSharedPreset()
+    {
+        if (!File.Exists(SharedPresetPath)) return null;
+        return JsonSerializer.Deserialize<WhiteboardRenderOptions>(
+            File.ReadAllText(SharedPresetPath));
+    }
 
     public IEnumerable<string> Arguments()
     {
@@ -45,7 +66,7 @@ public sealed class WhiteboardRenderOptions
     public bool Edit(IWin32Window owner)
     {
         using var window = new Form { Text = "Whiteboard - Thiết lập kết xuất nâng cao",
-            StartPosition = FormStartPosition.CenterParent, Size = new Size(570, 625),
+            StartPosition = FormStartPosition.CenterParent, Size = new Size(660, 650),
             MinimumSize = new Size(500, 520) };
         var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2,
             AutoScroll = true, Padding = new Padding(12), RowCount = 0 };
@@ -89,16 +110,27 @@ public sealed class WhiteboardRenderOptions
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var ok = new Button { Text = "Áp dụng", Width = 98 };
         var cancel = new Button { Text = "Hủy", Width = 98, DialogResult = DialogResult.Cancel };
+        void ReadForm()
+        {
+            LineThickness = (int)thickness.Value;
+            Hand = ((RenderChoice)hand.SelectedItem!).Value;
+            HandScale = handScale.Value;
+            LineReveal = ((RenderChoice)reveal.SelectedItem!).Value;
+            ColorFill = ((RenderChoice)color.SelectedItem!).Value;
+            BlockFillStyle = ((RenderChoice)fill.SelectedItem!).Value;
+            ColorFillScope = ((RenderChoice)scope.SelectedItem!).Value;
+            MaxDrawBlocks = (int)blocks.Value;
+            BlockOrder = ((RenderChoice)order.SelectedItem!).Value;
+            BlockOverlap = overlap.Value;
+            LineartSnapThreshold = (int)threshold.Value;
+            LineartSnap = snap.Checked;
+            PreprocessMode = ((RenderChoice)preprocessing.SelectedItem!).Value;
+        }
         buttons.Controls.Add(ok); buttons.Controls.Add(cancel);
         Add("Thao tác", buttons);
         ok.Click += (_, _) => { window.DialogResult = DialogResult.OK; };
         if (window.ShowDialog(owner) != DialogResult.OK) return false;
-        LineThickness = (int)thickness.Value; Hand = ((RenderChoice)hand.SelectedItem!).Value;
-        HandScale = handScale.Value; LineReveal = ((RenderChoice)reveal.SelectedItem!).Value; ColorFill = ((RenderChoice)color.SelectedItem!).Value;
-        BlockFillStyle = ((RenderChoice)fill.SelectedItem!).Value; ColorFillScope = ((RenderChoice)scope.SelectedItem!).Value;
-        MaxDrawBlocks = (int)blocks.Value; BlockOrder = ((RenderChoice)order.SelectedItem!).Value;
-        BlockOverlap = overlap.Value; LineartSnapThreshold = (int)threshold.Value;
-        LineartSnap = snap.Checked; PreprocessMode = ((RenderChoice)preprocessing.SelectedItem!).Value;
+        ReadForm();
         return true;
     }
 }
