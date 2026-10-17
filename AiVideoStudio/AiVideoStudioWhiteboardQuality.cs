@@ -19,18 +19,20 @@ public sealed partial class AiVideoStudioControl
     {
         using var popup = new Form {
             Text = "Whiteboard V2.1-B — Chất lượng và giữ màu ảnh gốc",
-            Width = 650, Height = 390, MinimumSize = new Size(610, 365),
+            Width = 650, Height = 475, MinimumSize = new Size(610, 435),
             StartPosition = FormStartPosition.CenterParent
         };
         var layout = new TableLayoutPanel {
             Dock = DockStyle.Fill, Padding = new Padding(14),
-            ColumnCount = 2, RowCount = 6
+            ColumnCount = 2, RowCount = 8
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 43));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 12));
@@ -70,6 +72,17 @@ public sealed partial class AiVideoStudioControl
         Label("Cách hiện màu", 2);
         layout.Controls.Add(reveal, 1, 2);
 
+        var strokeDetail = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+        strokeDetail.Items.AddRange(new object[] { "Balanced - net don gian", "Rich - net chi tiet", "Max - net toi da" });
+        strokeDetail.SelectedIndex = project.WhiteboardStrokeDetail switch { "balanced" => 0, "max" => 2, _ => 1 };
+        Label("Do chi tiet net ve", 3);
+        layout.Controls.Add(strokeDetail, 1, 3);
+        var animation = new ComboBox { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+        animation.Items.AddRange(new object[] { "Classic - ve toan canh", "Block Speedpaint - ve tung doi tuong" });
+        animation.SelectedIndex = project.WhiteboardAnimationPreset == "block-speedpaint" ? 1 : 0;
+        Label("Kieu hoat anh", 4);
+        layout.Controls.Add(animation, 1, 4);
+
         // Preset values are conservative to avoid halos on high-contrast ink.
         preset.SelectedIndexChanged += (_, _) =>
             sharpen.Value = preset.SelectedIndex switch {
@@ -85,7 +98,7 @@ public sealed partial class AiVideoStudioControl
                    "1.5x: dựng nét vẽ Full HD thực sự. 2.0x: dựng 1440p rồi thu về 1080p.\n" +
                    "Nếu cần giống ảnh gốc nhất, chọn 1.5x và Giữ màu ảnh gốc."
         };
-        layout.Controls.Add(info, 0, 3);
+        layout.Controls.Add(info, 0, 5);
         layout.SetColumnSpan(info, 2);
         var actions = new FlowLayoutPanel {
             Dock = DockStyle.Fill,
@@ -95,7 +108,7 @@ public sealed partial class AiVideoStudioControl
         var cancel = new Button { Text = "Hủy", Width = 80 };
         actions.Controls.Add(accept);
         actions.Controls.Add(cancel);
-        layout.Controls.Add(actions, 0, 4);
+        layout.Controls.Add(actions, 0, 6);
         layout.SetColumnSpan(actions, 2);
         cancel.Click += (_, _) => popup.DialogResult = DialogResult.Cancel;
         accept.Click += (_, _) => {
@@ -112,6 +125,8 @@ public sealed partial class AiVideoStudioControl
             project.WhiteboardSharpenAmount = (double)sharpen.Value / 100.0;
             project.WhiteboardRevealMode = reveal.SelectedIndex == 1
                 ? "source-mask" : "classic";
+            project.WhiteboardStrokeDetail = strokeDetail.SelectedIndex switch { 0 => "balanced", 2 => "max", _ => "rich" };
+            project.WhiteboardAnimationPreset = animation.SelectedIndex == 1 ? "block-speedpaint" : "classic";
             dirty = true;
             status.Text = $"Whiteboard: {scale:0.0}x, tăng nét {sharpen.Value}%, " +
                           (reveal.SelectedIndex == 1 ? "giữ màu ảnh gốc" : "màu cổ điển") +

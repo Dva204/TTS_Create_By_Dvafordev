@@ -31,6 +31,9 @@ public sealed class AiVideoProject
     // "classic" preserves prior fade; "source-mask" reveals the exact
     // source color plate through the engine's progressive contour mask.
     public string WhiteboardRevealMode { get; set; } = "source-mask";
+    public string WhiteboardStrokeDetail { get; set; } = "rich";
+    public string WhiteboardAnimationPreset { get; set; } = "classic";
+    public WhiteboardRenderOptions WhiteboardOptions { get; set; } = new();
     public List<AiVideoScene> Scenes { get; set; } = new();
     [JsonIgnore]
     public string FilePath { get; set; } = "";
@@ -294,6 +297,10 @@ public static class AiVideoProjectService
         if (!double.IsFinite(project.WhiteboardSharpenAmount) ||
             project.WhiteboardSharpenAmount < 0 || project.WhiteboardSharpenAmount > 0.5)
             throw new InvalidDataException("Độ nét Whiteboard phải từ 0 đến 0.5.");
+        if (project.WhiteboardStrokeDetail is not ("balanced" or "rich" or "max"))
+            throw new InvalidDataException("Unsupported Whiteboard stroke detail.");
+        if (project.WhiteboardAnimationPreset is not ("classic" or "block-speedpaint"))
+            throw new InvalidDataException("Unsupported Whiteboard animation preset.");
         if (project.WhiteboardRevealMode is not ("classic" or "source-mask"))
             throw new InvalidDataException("Chế độ màu Whiteboard không được hỗ trợ.");
     }

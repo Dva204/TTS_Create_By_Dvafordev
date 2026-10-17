@@ -44,6 +44,7 @@ public sealed partial class AiVideoStudioControl : UserControl
     private AiVideoProject project = new();
     private BindingList<AiVideoScene> scenes = new();
     private bool dirty;
+    private Action? refreshWhiteboardQuickOptions;
 
     public AiVideoStudioControl()
     {
@@ -309,6 +310,7 @@ public sealed partial class AiVideoStudioControl : UserControl
         audioInput.Clear(); subtitleInput.Clear(); imageFolderInput.Clear();
         status.Text = "Dự án mới. Import TTS/SRT rồi bấm Tạo storyboard.";
         dirty = false;
+        refreshWhiteboardQuickOptions?.Invoke();
     }
 
     private void GenerateStoryboard()
@@ -391,6 +393,7 @@ public sealed partial class AiVideoStudioControl : UserControl
             subtitleInput.Text = project.SubtitlePath;
             imageFolderInput.Text = project.ImageFolder;
             dirty = false;
+            refreshWhiteboardQuickOptions?.Invoke();
             status.Text = $"Đã mở {Path.GetFileName(picker.FileName)} ({scenes.Count} cảnh).";
         }
         catch (Exception ex)

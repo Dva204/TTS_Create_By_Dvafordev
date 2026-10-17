@@ -144,7 +144,7 @@ public sealed partial class AiVideoStudioControl
         view.RowStyles[0].SizeType = SizeType.Absolute;
         view.RowStyles[0].Height = 63;
         view.RowStyles[1].SizeType = SizeType.Absolute;
-        view.RowStyles[1].Height = 207;
+        view.RowStyles[1].Height = 303;
         view.RowStyles[2].SizeType = SizeType.Percent;
         view.RowStyles[2].Height = 100;
         view.RowStyles[3].SizeType = SizeType.Absolute;
@@ -199,7 +199,7 @@ public sealed partial class AiVideoStudioControl
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 216));
-        foreach (int height in new[] {37, 37, 37, 37, 46, 0})
+        foreach (int height in new[] {37, 37, 37, 37, 142, 0})
             sources.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
 
         void SourceRow(int row, string label, TextBox text, Button browse)
@@ -261,7 +261,7 @@ public sealed partial class AiVideoStudioControl
             AutoScroll = true, Margin = new Padding(0)
         };
         var import = new Button {
-            Name = "btnImportScenePlanBasic", Text = "Import Scene Plan",
+            Name = "btnImportScenePlanBasic", Text = "Nhập kế hoạch cảnh",
             Width = 173, Height = 33, Margin = new Padding(0, 5, 7, 4),
             Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
             BackColor = Color.FromArgb(226, 238, 251)
@@ -279,18 +279,131 @@ public sealed partial class AiVideoStudioControl
             button.Margin = new Padding(0, 5, 7, 4);
             essentials.Controls.Add(button);
         }
+        var clearList = new Button {
+            Name = "btnStudioClearList", Text = "Xóa danh sách / Dự án mới",
+            Width = 174, Height = 33, Margin = new Padding(0, 5, 7, 4),
+            BackColor = Color.FromArgb(255, 244, 231)
+        };
+        clearList.Click += (_, _) =>
+        {
+            if (renderProcess is { HasExited: false })
+            {
+                MessageBox.Show(this, "Hãy dừng kết xuất trước khi xóa danh sách cảnh.",
+                    "AI Video Studio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (scenes.Count == 0 && string.IsNullOrWhiteSpace(audioInput.Text) &&
+                string.IsNullOrWhiteSpace(subtitleInput.Text) && string.IsNullOrWhiteSpace(imageFolderInput.Text)) return;
+            if (MessageBox.Show(this,
+                "Xóa danh sách cảnh, lựa chọn âm thanh và SRT để tạo video mới? Dự án đã lưu và video xuất không bị xóa.",
+                "Tạo video mới", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            ResetProject();
+            status.Text = "Đã làm mới dự án. Các tệp đã lưu vẫn được giữ.";
+        };
+        essentials.Controls.Add(clearList);
         var advancedButton = new Button {
             Name = "btnMinimalAdvanced", Text = "Tùy chọn ▾",
             Width = 113, Height = 33, Margin = new Padding(0, 5, 4, 4)
         };
         essentials.Controls.Add(advancedButton);
-        sources.Controls.Add(essentials, 1, 4);
-        sources.SetColumnSpan(essentials, 2);
+        // Group commonly used actions and Whiteboard rendering settings separately.
+        // Reparent the existing buttons so their original event handlers remain intact.
+        var actionArea = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+            Margin = new Padding(0), Padding = new Padding(0)
+        };
+        actionArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
+        actionArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        actionArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var projectPanel = new GroupBox {
+            Text = "DỰ ÁN & SCENE", Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            Padding = new Padding(8, 10, 4, 1)
+        };
+        essentials.WrapContents = true;
+        essentials.AutoScroll = true;
+        essentials.Padding = new Padding(0, 3, 0, 0);
+        projectPanel.Controls.Add(essentials);
+        actionArea.Controls.Add(projectPanel, 0, 0);
+        var whiteboardPanel = new GroupBox {
+            Text = "WHITEBOARD - KIỂU VẼ", Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+            Padding = new Padding(8, 11, 4, 1)
+        };
+        var whiteboardActions = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3,
+            Padding = new Padding(3, 2, 3, 0)
+        };
+        whiteboardActions.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 85));
+        whiteboardActions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        whiteboardActions.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        var strokePicker = new ComboBox {
+            Name = "cmbStudioStrokeDetail", Dock = DockStyle.Fill,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = new Font("Segoe UI", 9f)
+        };
+        strokePicker.Items.AddRange(new object[] {
+            "Ít nét - đơn giản", "Nhiều nét - chi tiết", "Tối đa nét vẽ"
+        });
+        var animationPicker = new ComboBox {
+            Name = "cmbStudioAnimation", Dock = DockStyle.Fill,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Font = new Font("Segoe UI", 9f)
+        };
+        animationPicker.Items.AddRange(new object[] {
+            "Vẽ toàn cảnh", "Vẽ từng đối tượng"
+        });
+        void LoadWhiteboardOptions()
+        {
+            strokePicker.SelectedIndex = project.WhiteboardStrokeDetail switch {
+                "balanced" => 0, "max" => 2, _ => 1
+            };
+            animationPicker.SelectedIndex =
+                project.WhiteboardAnimationPreset == "block-speedpaint" ? 1 : 0;
+        }
+        void ApplyWhiteboardOptions()
+        {
+            if (strokePicker.SelectedIndex < 0 || animationPicker.SelectedIndex < 0) return;
+            project.WhiteboardStrokeDetail = strokePicker.SelectedIndex switch {
+                0 => "balanced", 2 => "max", _ => "rich"
+            };
+            project.WhiteboardAnimationPreset =
+                animationPicker.SelectedIndex == 1 ? "block-speedpaint" : "classic";
+            dirty = true;
+        }
+        strokePicker.SelectionChangeCommitted += (_, _) => ApplyWhiteboardOptions();
+        animationPicker.SelectionChangeCommitted += (_, _) => ApplyWhiteboardOptions();
+        whiteboardActions.Controls.Add(new Label {
+            Text = "Nét vẽ", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0);
+        whiteboardActions.Controls.Add(strokePicker, 1, 0);
+        whiteboardActions.Controls.Add(new Label {
+            Text = "Hoạt ảnh", Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 1);
+        whiteboardActions.Controls.Add(animationPicker, 1, 1);
+        var whiteboardMore = new Button {
+            Text = "Thiết lập nâng cao...", Dock = DockStyle.Left, Width = 156,
+            Height = 27
+        };
+        whiteboardMore.Click += (_, _) => { if (project.WhiteboardOptions.Edit(this)) dirty = true; };
+        whiteboardActions.Controls.Add(whiteboardMore, 1, 2);
+        whiteboardPanel.Controls.Add(whiteboardActions);
+        actionArea.Controls.Add(whiteboardPanel, 1, 0);
+        sources.Controls.Add(actionArea, 1, 4);
+        sources.SetColumnSpan(actionArea, 2);
         sources.Controls.Add(new Label {
-            Text = "Thao tác", Dock = DockStyle.Fill,
+            Text = "Công cụ", Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(52, 69, 91)
         }, 0, 4);
+        // Refresh controls after loading, clearing or opening a project.
+        refreshWhiteboardQuickOptions = LoadWhiteboardOptions;
+        this.VisibleChanged += (_, _) => LoadWhiteboardOptions();
+        LoadWhiteboardOptions();
 
         // Reuse existing manual grouping, quality, subtitle, and preview
         // controls, but hide by default to simplify everyday Claude workflows.
@@ -374,7 +487,7 @@ public sealed partial class AiVideoStudioControl
             {
                 advanced.Visible = show;
                 sources.RowStyles[5].Height = show ? 118 : 0;
-                view.RowStyles[1].Height = show ? 333 : 207;
+                view.RowStyles[1].Height = show ? 429 : 303;
                 advancedButton.Text = show ? "Ẩn tùy chọn ▴" : "Tùy chọn ▾";
                 storyboardGrid.Columns.Cast<DataGridViewColumn>()
                     .First(c => c.DataPropertyName == nameof(AiVideoScene.StartMs)).Visible = show;

@@ -78,7 +78,43 @@ def load_project(path: Path, audio_seconds: float, scene_index: int = 0):
     # preferences continue to override the new creation defaults.
     raw.setdefault("whiteboardRenderScale", 1.5)
     raw.setdefault("whiteboardSharpenAmount", 0.15)
+    if raw.get("whiteboardStrokeDetail", "rich") not in ("balanced", "rich", "max"):
+        raise ValueError("Invalid whiteboardStrokeDetail")
+    if raw.get("whiteboardAnimationPreset", "classic") not in ("classic", "block-speedpaint"):
+        raise ValueError("Invalid whiteboardAnimationPreset")
     raw.setdefault("whiteboardRevealMode", "source-mask")
+    raw.setdefault("whiteboardStrokeDetail", "rich")
+    raw.setdefault("whiteboardAnimationPreset", "classic")
+    opts = raw.setdefault("whiteboardOptions", {})
+    if not isinstance(opts, dict):
+        raise ValueError("whiteboardOptions must be an object")
+    allowed = {
+        "hand": ("asian","black","children","white","procedural","none"),
+        "lineReveal": ("stroke","detail-wipe"),
+        "colorFill": ("fade","contour-wipe","brush-scan","top-down-blocks","left-to-right-gradient"),
+        "blockFillStyle": ("crayon","clean","soft-wash","dry-brush"),
+        "colorFillScope": ("block","scene"),
+        "blockOrder": ("reading","source"),
+        "preprocessMode": ("edges","detail","ink"),
+    }
+    defaults = {"hand":"asian","lineReveal":"stroke","colorFill":"fade",
+                "blockFillStyle":"crayon","colorFillScope":"block",
+                "blockOrder":"reading","preprocessMode":"edges"}
+    for key, accepted in allowed.items():
+        if opts.get(key, defaults[key]) not in accepted:
+            raise ValueError("Invalid whiteboardOptions." + key)
+    def number(key, default, low, high):
+        value = opts.get(key, default)
+        if type(value) not in (int,float) or not math.isfinite(value) or not low <= value <= high:
+            raise ValueError("Invalid whiteboardOptions." + key)
+    number("lineThickness",2,0,8)
+    number("handScale",1.0,.1,3)
+    number("maxDrawBlocks",6,1,40)
+    number("blockOverlap",.08,0,.65)
+    number("lineartSnapThreshold",96,0,255)
+    if type(opts.get("lineartSnap",True)) is not bool:
+        raise ValueError("Invalid whiteboardOptions.lineartSnap")
+
     scenes = raw.get("scenes", [])
     if not isinstance(scenes, list) or not scenes:
         raise ValueError("Project must have at least one scene")
@@ -277,7 +313,7 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
     else:
         # High-fidelity drawing gets extra contour detail without touching
         # the original raster asset, which is still used as the color plate.
-        mode = "detail" if scene.get("whiteboardScale", 1.0) > 1.0 else "edges"
+        mode = scene.get("whiteboardOptions", {}).get("preprocessMode", "edges")
         strokes, source_image = prepare_raster(image, folder, width, height, mode)
     length = scene["end"] - scene["start"]
     reveal_mode = scene.get("whiteboardRevealMode", "classic")
@@ -291,14 +327,27 @@ def render_whiteboard(scene: dict, output: Path, folder: Path,
     else:
         tail = max(.35, min(2.2, length * .3))
         fill = "fade"
+    opts = scene.get("whiteboardOptions", {})
     cmd = [str(engine), "render-image", str(strokes),
            "-o", str(output), "--duration", f"{length:.6f}",
            "--width", str(width), "--height", str(height),
-           "--fps", str(fps), "--hand", "asian", "--animation-preset",
-           "classic", "--color-fill", fill,
-           "--tail-color", f"{tail:.3f}"]
-    if scene.get("whiteboardScale", 1.0) > 1.0:
-        cmd += ["--stroke-detail", "rich"]
+           "--fps", str(fps), "--hand", opts.get("hand", "asian"), "--animation-preset",
+           scene.get("whiteboardAnimationPreset", "classic"), "--color-fill", fill,
+           "--tail-color", f"{tail:.3f}",
+           "--line-thickness", str(opts.get("lineThickness", 2)),
+           "--hand-scale", str(opts.get("handScale", 1.0)),
+           "--line-reveal", opts.get("lineReveal", "stroke"),
+           "--block-fill-style", opts.get("blockFillStyle", "crayon"),
+           "--color-fill-scope", opts.get("colorFillScope", "block"),
+           "--max-draw-blocks", str(opts.get("maxDrawBlocks", 6)),
+           "--block-order", opts.get("blockOrder", "reading"),
+           "--block-overlap", str(opts.get("blockOverlap", 0.08)),
+           "--lineart-snap-threshold", str(opts.get("lineartSnapThreshold", 96))]
+    if not opts.get("lineartSnap", True):
+        cmd.append("--no-lineart-snap")
+    fill = opts.get("colorFill", fill)
+    cmd[cmd.index("--color-fill") + 1] = fill
+    cmd += ["--stroke-detail", scene.get("whiteboardStrokeDetail", "rich")]
     if source_image:
         cmd += ["--source-image", str(source_image), "--source-fit", "exact"]
     execute(cmd, "Whiteboard scene")
@@ -335,6 +384,9 @@ def digest_scene(scene: dict, width: int, height: int, fps: int, frames: int,
               str(scene.get("whiteboardScale", 1.0)),
               str(scene.get("whiteboardSharpen", 0.0)),
               scene.get("whiteboardRevealMode", "classic"),
+              scene.get("whiteboardStrokeDetail", "rich"),
+              scene.get("whiteboardAnimationPreset", "classic"),
+              json.dumps(scene.get("whiteboardOptions", {}), sort_keys=True),
               str(fps), str(frames), scene["text"], scene["notes"],
               json.dumps(scene.get("directionEvents", []), sort_keys=True),
               scene.get("transition", "fade")]
@@ -371,6 +423,9 @@ def render_project(args):
     wb_scale = float(project.get("whiteboardRenderScale", 1.5))
     wb_sharpen = float(project.get("whiteboardSharpenAmount", 0.15))
     wb_reveal = project.get("whiteboardRevealMode", "source-mask")
+    wb_stroke = project.get("whiteboardStrokeDetail", "rich")
+    wb_animation = project.get("whiteboardAnimationPreset", "classic")
+    wb_options = project.get("whiteboardOptions", {})
     high_fidelity = args.quality == "youtube" and wb_scale > 1.0
     # All cached scene clips need identical dimensions for lossless concat.
     # Only Whiteboard strokes need high-res tracing; other styles render at
@@ -405,6 +460,9 @@ def render_project(args):
         scene["whiteboardScale"] = scene_scale
         scene["whiteboardSharpen"] = wb_sharpen if (args.quality == "youtube" and scene["style"] == "whiteboard") else 0.0
         scene["whiteboardRevealMode"] = wb_reveal if scene["style"] == "whiteboard" else "classic"
+        scene["whiteboardStrokeDetail"] = wb_stroke
+        scene["whiteboardAnimationPreset"] = wb_animation
+        scene["whiteboardOptions"] = wb_options
         scene_w = int(width * scene_scale)
         scene_h = int(height * scene_scale)
         if frames < 1:
@@ -460,6 +518,9 @@ def render_project(args):
         "whiteboardRenderScale": wb_scale,
         "whiteboardSharpenAmount": wb_sharpen,
         "whiteboardRevealMode": wb_reveal,
+        "whiteboardStrokeDetail": wb_stroke,
+        "whiteboardAnimationPreset": wb_animation,
+        "whiteboardOptions": wb_options,
         "clipSize": [norm_w, norm_h],
         "tracks": track_signature(project, music, burn_subtitles, subtitle_cues),
     }, sort_keys=True).encode("utf-8")).hexdigest()
@@ -566,6 +627,9 @@ def render_project(args):
         "whiteboardRenderScale": wb_scale,
         "whiteboardSharpenAmount": wb_sharpen,
         "whiteboardRevealMode": wb_reveal,
+        "whiteboardStrokeDetail": wb_stroke,
+        "whiteboardAnimationPreset": wb_animation,
+        "whiteboardOptions": wb_options,
         "sceneRenderSize": [width, height],
         "sceneClipSize": [norm_w, norm_h],
         "scenes": [{"index": s["index"], "style": s["style"],
