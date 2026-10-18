@@ -240,11 +240,61 @@ public partial class Form1
     // Reparent them into responsive cells rather than squeezing old positions.
     private void FixTtsBatchLayout()
     {
-        ttsRootLayout.RowStyles[0].Height = 202;
-        ttsRootLayout.RowStyles[1].Height = 153;
-        ttsTopLayout.ColumnStyles[0].Width = 44;
+        ttsRootLayout.RowStyles[0].Height = 195;
+        ttsRootLayout.RowStyles[1].Height = 145;
+        ttsTopLayout.ColumnStyles[0].Width = 42;
         ttsTopLayout.ColumnStyles[1].Width = 36;
-        ttsTopLayout.ColumnStyles[2].Width = 20;
+        ttsTopLayout.ColumnStyles[2].Width = 22;
+        grpVoice.Padding = new Padding(10, 16, 10, 8);
+        grpSystem.Padding = new Padding(10, 16, 10, 8);
+        // ComboBoxes have an intrinsic native height. Align every input
+        // by its row center, not by stretching the control's height.
+        foreach (var combo in new[] { voiceComboBox, engineComboBox, languageComboBox, cmbDevice })
+        {
+            combo.Font = new Font("Segoe UI", 9f);
+            combo.IntegralHeight = false;
+            combo.FlatStyle = FlatStyle.Standard;
+        }
+        var voiceItems = new Control[] { lblVoiceId, txtVoiceName, btnSearchVoice,
+            lblVoice, voiceComboBox, lblModel, engineComboBox,
+            lblLanguage, languageComboBox, btnOpenVoiceLibrary };
+        foreach (var item in voiceItems) grpVoice.Controls.Remove(item);
+        var voiceGrid = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 4,
+            Padding = new Padding(4, 5, 4, 3), Margin = Padding.Empty
+        };
+        voiceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 33));
+        voiceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46));
+        voiceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
+        voiceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
+        voiceGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54));
+        for (int i = 0; i < 4; i++)
+            voiceGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        void VoiceCell(Control c, int col, int row)
+        {
+            c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            c.Dock = DockStyle.None;
+            c.Margin = new Padding(3, 3, 3, 3);
+            if (c is Label label) { label.AutoSize = false; label.TextAlign = ContentAlignment.MiddleLeft; }
+            if (c is ComboBox cb) cb.DropDownHeight = 230;
+            voiceGrid.Controls.Add(c, col, row);
+        }
+        VoiceCell(lblVoiceId, 0, 0);
+        VoiceCell(txtVoiceName, 1, 0);
+        VoiceCell(btnSearchVoice, 2, 0);
+        VoiceCell(lblVoice, 3, 0);
+        VoiceCell(voiceComboBox, 4, 0);
+        VoiceCell(lblModel, 3, 1);
+        VoiceCell(engineComboBox, 4, 1);
+        VoiceCell(lblLanguage, 3, 2);
+        VoiceCell(languageComboBox, 4, 2);
+        VoiceCell(btnOpenVoiceLibrary, 1, 2);
+        btnOpenVoiceLibrary.Text = "Thư viện giọng";
+        btnSearchVoice.Text = "Tìm";
+        lblVoice.Text = "Giọng:";
+        lblModel.Text = "Model:";
+        lblLanguage.Text = "Ngôn ngữ:";
+        grpVoice.Controls.Add(voiceGrid);
         grpVoiceSettings.Padding = new Padding(8, 14, 8, 6);
         grpOptions.Padding = new Padding(8, 15, 8, 6);
         var voiceControls = new Control[] {
@@ -257,17 +307,18 @@ public partial class Form1
             Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 5,
             Padding = new Padding(2, 1, 2, 0), Margin = Padding.Empty
         };
-        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29));
+        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 31));
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19));
-        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
         for (int i = 0; i < 5; i++)
             settingsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
         void Place(Control c, int col, int row)
         {
-            c.Dock = DockStyle.Fill;
-            c.Margin = new Padding(2);
-            if (c is Label lbl) lbl.TextAlign = ContentAlignment.MiddleLeft;
+            c.Dock = DockStyle.None;
+            c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            c.Margin = new Padding(3, 2, 3, 2);
+            if (c is Label lbl) { lbl.AutoSize = false; lbl.TextAlign = ContentAlignment.MiddleLeft; }
             settingsGrid.Controls.Add(c, col, row);
         }
         Place(chkVoiceSettings, 0, 0);
@@ -281,6 +332,14 @@ public partial class Form1
         Place(lblDenoise, 2, 3); Place(numDenoise, 3, 3);
         Place(btnResetVoiceSettings, 2, 4);
         settingsGrid.SetColumnSpan(btnResetVoiceSettings, 2);
+        lblSpeed.Text = "Tốc độ:";
+        lblStability.Text = "CFG:";
+        lblSimilarity.Text = "Nhiệt độ:";
+        lblStyle.Text = "Biểu cảm:";
+        lblDenoise.Text = "Giảm nhiễu:";
+        chkVoiceSettings.Text = "Điều chỉnh giọng";
+        chkSpeakerBoost.Text = "Tăng cường giọng";
+        btnResetVoiceSettings.Text = "Đặt lại";
         grpVoiceSettings.Controls.Add(settingsGrid);
 
         var optionsControls = new Control[] {
@@ -292,8 +351,8 @@ public partial class Form1
             Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4,
             Margin = Padding.Empty, Padding = new Padding(3, 2, 3, 1)
         };
-        optionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        optionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        optionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        optionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         for (int i = 0; i < 4; i++)
             optionsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
         void Opt(Control c, int col, int row)
@@ -317,6 +376,13 @@ public partial class Form1
         Opt(splitRow, 1, 2);
         Opt(btnAdvancedSettings, 0, 3);
         optionsGrid.SetColumnSpan(btnAdvancedSettings, 2);
+        chkRetryFailed.Text = "Thử lại lỗi";
+        chkAutoSplit.Text = "Tự chia đoạn";
+        chkSkipExisting.Text = "Bỏ qua đã có";
+        chkAutoJoin.Text = "Tự ghép";
+        chkDeleteSegments.Text = "Xóa đoạn tạm";
+        lblSplitChars.Text = "Tách:";
+        btnAdvancedSettings.Text = "Thiết lập nâng cao";
         grpOptions.Controls.Add(optionsGrid);
     }
 
