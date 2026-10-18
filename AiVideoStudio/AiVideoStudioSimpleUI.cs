@@ -135,13 +135,14 @@ public sealed partial class AiVideoStudioControl
         // Modern workspace: scene table and embedded player side by side.
         workspaceSplit.Panel2Collapsed = false;
         workspaceSplit.Orientation = Orientation.Vertical;
+        InstallSceneInspector(workspaceSplit.Panel2);
         workspaceSplit.BackColor = Color.FromArgb(226, 233, 240);
         workspaceSplit.SplitterWidth = 6;
         void ResizeWorkspace()
         {
             if (workspaceSplit.IsDisposed || workspaceSplit.Width < 420) return;
             var usable = workspaceSplit.Width - workspaceSplit.SplitterWidth;
-            var target = (int)(usable * (workspaceSplit.Width >= 1000 ? 0.54 : 0.50));
+            var target = (int)(usable * (workspaceSplit.Width >= 1000 ? 0.43 : 0.46));
             if (workspaceSplit.SplitterDistance != target)
                 workspaceSplit.SplitterDistance = target;
         }
@@ -177,13 +178,31 @@ public sealed partial class AiVideoStudioControl
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 212));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        header.Controls.Add(new Label {
+        TableLayoutPanel? collapsibleSources = null;
+        var headerLeft = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        var sourceToggle = new Button {
+            Text = "Thu gọn nguồn dữ liệu", Width = 165, Height = 34,
+            Dock = DockStyle.Right, Margin = new Padding(3),
+            FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand
+        };
+        sourceToggle.FlatAppearance.BorderColor = Color.FromArgb(213, 225, 233);
+        sourceToggle.Click += (_, _) =>
+        {
+            if (collapsibleSources is null) return;
+            bool expand = !collapsibleSources.Visible;
+            collapsibleSources.Visible = expand;
+            view.RowStyles[1].Height = expand ? 359 : 0;
+            sourceToggle.Text = expand ? "Thu gọn nguồn dữ liệu" : "Mở nguồn dữ liệu";
+        };
+        headerLeft.Controls.Add(new Label {
             Text = "AI VIDEO STUDIO",
             Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(13, 0, 0, 0),
             ForeColor = Color.FromArgb(25, 51, 82),
             Font = new Font("Segoe UI", 12, FontStyle.Bold)
-        }, 0, 0);
+        });
+        headerLeft.Controls.Add(sourceToggle);
+        header.Controls.Add(headerLeft, 0, 0);
         stop.Text = "Dừng render";
         stop.Dock = DockStyle.Fill;
         stop.AutoSize = false;
@@ -211,6 +230,7 @@ public sealed partial class AiVideoStudioControl
             BackColor = Color.White, Padding = new Padding(10, 8, 10, 3),
             Margin = new Padding(0, 3, 0, 3), AutoScroll = true
         };
+        collapsibleSources = sources;
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 216));
@@ -283,6 +303,46 @@ public sealed partial class AiVideoStudioControl
         };
         import.Click += (_, _) => ImportScenePlan();
         essentials.Controls.Add(import);
+        var inspectPlan = new Button {
+            Text = "Kiểm tra SRT / Scene", AutoSize = true, Height = 34
+        };
+        inspectPlan.Click += (_, _) =>
+        {
+            if (!File.Exists(subtitleInput.Text))
+            {
+                MessageBox.Show(this, "Hãy chọn SRT trước khi kiểm tra Scene Plan.");
+                return;
+            }
+            using var picker = new OpenFileDialog {
+                Title = "Chọn Scene Plan để kiểm tra",
+                Filter = "Scene Plan (*.json)|*.json", CheckFileExists = true
+            };
+            if (picker.ShowDialog(this) != DialogResult.OK) return;
+            try
+            {
+                var report = ScenePlanDiagnostics.Check(
+                    subtitleInput.Text, picker.FileName, imageFolderInput.Text);
+                using var result = new Form {
+                    Text = "Kiểm tra SRT & Scene Plan",
+                    StartPosition = FormStartPosition.CenterParent,
+                    Size = new Size(760, 580), MinimumSize = new Size(520, 380)
+                };
+                var field = new TextBox {
+                    Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Both,
+                    ReadOnly = true, WordWrap = true, Font = new Font("Consolas", 10),
+                    Text = report.DisplayText()
+                };
+                result.Controls.Add(field);
+                result.ShowDialog(this);
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or
+                System.Text.Json.JsonException or UnauthorizedAccessException)
+            {
+                MessageBox.Show(this, ex.Message, "Không thể kiểm tra Scene Plan",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        };
+        essentials.Controls.Add(inspectPlan);
 
         openProject.Text = "Mở dự án";
         saveProject.Text = "Lưu dự án";
