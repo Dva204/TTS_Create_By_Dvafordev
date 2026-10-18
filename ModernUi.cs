@@ -127,6 +127,7 @@ public partial class Form1
         ApplyModernControlStyles(mainTabControl);
         ApplyLegacyWorkspaceStyles();
         FixTtsBatchLayout();
+        FixVideoEditorLayout();
         mainTabControl.SelectedIndexChanged += (_, _) => RefreshModernNavigation();
         RefreshModernNavigation();
         MinimumSize = new Size(1030, 680);
@@ -384,6 +385,88 @@ public partial class Form1
         lblSplitChars.Text = "Tách:";
         btnAdvancedSettings.Text = "Thiết lập nâng cao";
         grpOptions.Controls.Add(optionsGrid);
+    }
+
+    private void FixVideoEditorLayout()
+    {
+        videoRootLayout.RowStyles[0].Height = 244;
+        grpVideoSource.Padding = new Padding(12, 18, 12, 10);
+        grpVideoOptions.Padding = new Padding(12, 18, 12, 10);
+
+        var sourceControls = new Control[] {
+            lblVideoAudio, txtVideoAudio, btnBrowseVideoAudio,
+            lblVideoSrt, txtVideoSrt, btnBrowseVideoSrt,
+            lblImageFolder, txtImageFolder, btnBrowseImageFolder,
+            lblTimelineMode, cmbTimelineMode, lblImageMapping, cmbImageMapping,
+            btnAnalyzeTimeline
+        };
+        foreach (var c in sourceControls) grpVideoSource.Controls.Remove(c);
+        var inputs = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 4,
+            Margin = Padding.Empty, Padding = new Padding(4, 4, 4, 4)
+        };
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 45));
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 124));
+        for (int i = 0; i < 4; i++) inputs.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        void Put(Control c, int x, int y, int span = 1)
+        {
+            c.Dock = DockStyle.None;
+            c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            c.Margin = new Padding(4, 3, 4, 3);
+            if (c is Label l) { l.AutoSize = false; l.TextAlign = ContentAlignment.MiddleLeft; }
+            if (c is ComboBox combo) combo.FlatStyle = FlatStyle.Standard;
+            inputs.Controls.Add(c, x, y);
+            if (span > 1) inputs.SetColumnSpan(c, span);
+        }
+        Put(lblVideoAudio, 0, 0); Put(txtVideoAudio, 1, 0, 4); Put(btnBrowseVideoAudio, 5, 0);
+        Put(lblVideoSrt, 0, 1); Put(txtVideoSrt, 1, 1, 4); Put(btnBrowseVideoSrt, 5, 1);
+        Put(lblImageFolder, 0, 2); Put(txtImageFolder, 1, 2, 4); Put(btnBrowseImageFolder, 5, 2);
+        Put(lblTimelineMode, 0, 3); Put(cmbTimelineMode, 1, 3);
+        Put(lblImageMapping, 3, 3); Put(cmbImageMapping, 4, 3);
+        Put(btnAnalyzeTimeline, 5, 3);
+        grpVideoSource.Controls.Add(inputs);
+
+        var optionControls = new Control[] {
+            lblResolution, cmbResolution, lblFps, cmbFps,
+            lblAspectRatio, cmbAspectRatio, lblEncoder, cmbEncoder,
+            lblVideoQuality, cmbVideoQuality, chkKenBurns, chkCrossfade,
+            chkBurnSubtitle, chkHardwareEncoding, lblTransitionDuration,
+            numTransitionDuration, lblTransitionSeconds
+        };
+        foreach (var c in optionControls) grpVideoOptions.Controls.Remove(c);
+        var opts = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 5,
+            Margin = Padding.Empty, Padding = new Padding(2, 4, 2, 3)
+        };
+        opts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
+        opts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        opts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+        opts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        for (int i = 0; i < 5; i++) opts.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+        void Option(Control c, int x, int y, int span = 1)
+        {
+            c.Dock = DockStyle.None;
+            c.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            c.Margin = new Padding(3, 2, 3, 2);
+            if (c is Label l) { l.AutoSize = false; l.TextAlign = ContentAlignment.MiddleLeft; }
+            if (c is ComboBox cb) cb.FlatStyle = FlatStyle.Standard;
+            opts.Controls.Add(c, x, y);
+            if (span > 1) opts.SetColumnSpan(c, span);
+        }
+        Option(lblResolution, 0, 0); Option(cmbResolution, 1, 0);
+        Option(lblFps, 2, 0); Option(cmbFps, 3, 0);
+        Option(lblAspectRatio, 0, 1); Option(cmbAspectRatio, 1, 1);
+        Option(lblVideoQuality, 2, 1); Option(cmbVideoQuality, 3, 1);
+        Option(lblEncoder, 0, 2); Option(cmbEncoder, 1, 2);
+        Option(chkKenBurns, 0, 3); Option(chkCrossfade, 1, 3);
+        Option(chkBurnSubtitle, 2, 3); Option(chkHardwareEncoding, 3, 3);
+        Option(lblTransitionDuration, 0, 4); Option(numTransitionDuration, 1, 4);
+        Option(lblTransitionSeconds, 2, 4);
+        grpVideoOptions.Controls.Add(opts);
     }
 
     private void RefreshModernNavigation()
