@@ -95,7 +95,7 @@ def load_project(path: Path, audio_seconds: float, scene_index: int = 0):
         "blockFillStyle": ("crayon","clean","soft-wash","dry-brush"),
         "colorFillScope": ("block","scene"),
         "blockOrder": ("reading","source"),
-        "preprocessMode": ("edges","detail","ink"),
+        "preprocessMode": ("edges","detail","ink","clean-detail"),
     }
     defaults = {"hand":"asian","lineReveal":"stroke","colorFill":"fade",
                 "blockFillStyle":"crayon","colorFillScope":"block",

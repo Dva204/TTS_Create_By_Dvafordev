@@ -9,7 +9,7 @@ def main():
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
-    parser.add_argument("--mode", choices=("edges","detail","ink"), default="edges")
+    parser.add_argument("--mode", choices=("edges","detail","ink","clean-detail"), default="edges")
     args = parser.parse_args()
     if not args.image.is_file():
         parser.error("Image not found")

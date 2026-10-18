@@ -106,7 +106,7 @@ public sealed class WhiteboardRenderOptions
         var overlap = Number(BlockOverlap, 0, .65m, 2); Add("Độ chồng lấn nhóm", overlap);
         var threshold = Number(LineartSnapThreshold, 0, 255); Add("Ngưỡng bám nét gốc", threshold);
         var snap = new CheckBox { Checked = LineartSnap, Text = "Bám đường nét ảnh gốc" }; Add("Bám nét gốc", snap);
-        var preprocessing = Pick(new[] {"edges","detail","ink"}, new[] {"Lấy đường viền","Giữ nhiều chi tiết","Giữ nét mực đậm"}, PreprocessMode); Add("Xử lý ảnh đầu vào", preprocessing);
+        var preprocessing = Pick(new[] {"edges","detail","ink","clean-detail"}, new[] {"Lấy đường viền","Giữ nhiều chi tiết","Giữ nét mực đậm","V3 - nét sạch, chống mảng đen"}, PreprocessMode); Add("Xử lý ảnh đầu vào", preprocessing);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var ok = new Button { Text = "Áp dụng", Width = 98 };
         var cancel = new Button { Text = "Hủy", Width = 98, DialogResult = DialogResult.Cancel };

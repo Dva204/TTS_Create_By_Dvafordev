@@ -124,7 +124,18 @@ def prepare_raster(path: Path, target: Path, width: int, height: int, mode: str 
     # CPU modes; useful for AI illustrations drawn on light backgrounds.
     # None of these modes performs semantic object segmentation.
     gray = ImageOps.autocontrast(canvas.convert("L"))
-    if mode == "ink":
+    if mode == "clean-detail":
+        # V3: combine thin luminance edges with the border of dark shapes.
+        # Unlike an ink threshold, solid hair/clothing regions remain WHITE
+        # inside. This prevents dark blobs from appearing as thick brush strokes.
+        contour = gray.filter(ImageFilter.GaussianBlur(radius=0.75))
+        contour = contour.filter(ImageFilter.FIND_EDGES)
+        contour = contour.point(lambda value: 0 if value >= 34 else 255)
+        dark = gray.point(lambda value: 0 if value < 126 else 255)
+        dark_border = ImageOps.invert(ImageChops.difference(
+            dark, dark.filter(ImageFilter.MaxFilter(3))))
+        edges = ImageChops.darker(contour, dark_border)
+    elif mode == "ink":
         # Preserve dark outlines instead of outlining all color transitions.
         edges = gray.point(lambda value: 0 if value < 140 else 255)
     else:
@@ -309,7 +320,7 @@ def main() -> int:
     parser.add_argument("--preset", choices=["classic", "block-speedpaint"],
                         default="classic")
     parser.add_argument("--color-fill", default="contour-wipe")
-    parser.add_argument("--lineart-mode", choices=["edges", "detail", "ink"],
+    parser.add_argument("--lineart-mode", choices=["edges", "detail", "ink", "clean-detail"],
                         default="edges")
     parser.add_argument("--draw-blocks", type=int, default=4)
     parser.add_argument("--block-order", choices=["reading", "source"], default="reading")
