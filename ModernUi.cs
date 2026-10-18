@@ -126,6 +126,7 @@ public partial class Form1
         Controls.Add(shell);
         ApplyModernControlStyles(mainTabControl);
         ApplyLegacyWorkspaceStyles();
+        FixTtsBatchLayout();
         mainTabControl.SelectedIndexChanged += (_, _) => RefreshModernNavigation();
         RefreshModernNavigation();
         MinimumSize = new Size(1030, 680);
@@ -232,6 +233,91 @@ public partial class Form1
             }
             if (child.HasChildren) StyleLegacyChildren(child);
         }
+    }
+
+    // The legacy voice options were positioned with fixed X/Y coordinates.
+    // When the new sidebar reduced usable width they overlapped each other.
+    // Reparent them into responsive cells rather than squeezing old positions.
+    private void FixTtsBatchLayout()
+    {
+        ttsRootLayout.RowStyles[0].Height = 202;
+        ttsRootLayout.RowStyles[1].Height = 153;
+        ttsTopLayout.ColumnStyles[0].Width = 44;
+        ttsTopLayout.ColumnStyles[1].Width = 36;
+        ttsTopLayout.ColumnStyles[2].Width = 20;
+        grpVoiceSettings.Padding = new Padding(8, 14, 8, 6);
+        grpOptions.Padding = new Padding(8, 15, 8, 6);
+        var voiceControls = new Control[] {
+            chkVoiceSettings, lblSpeed, numSpeed, lblStability, numStability,
+            lblSimilarity, numSimilarity, lblStyle, numStyle,
+            chkSpeakerBoost, lblDenoise, numDenoise, btnResetVoiceSettings
+        };
+        foreach (var c in voiceControls) grpVoiceSettings.Controls.Remove(c);
+        var settingsGrid = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 5,
+            Padding = new Padding(2, 1, 2, 0), Margin = Padding.Empty
+        };
+        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 29));
+        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 19));
+        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+        settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+        for (int i = 0; i < 5; i++)
+            settingsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 20));
+        void Place(Control c, int col, int row)
+        {
+            c.Dock = DockStyle.Fill;
+            c.Margin = new Padding(2);
+            if (c is Label lbl) lbl.TextAlign = ContentAlignment.MiddleLeft;
+            settingsGrid.Controls.Add(c, col, row);
+        }
+        Place(chkVoiceSettings, 0, 0);
+        settingsGrid.SetColumnSpan(chkVoiceSettings, 4);
+        Place(lblSpeed, 0, 1); Place(numSpeed, 1, 1);
+        Place(lblStyle, 2, 1); Place(numStyle, 3, 1);
+        Place(lblStability, 0, 2); Place(numStability, 1, 2);
+        Place(chkSpeakerBoost, 2, 2);
+        settingsGrid.SetColumnSpan(chkSpeakerBoost, 2);
+        Place(lblSimilarity, 0, 3); Place(numSimilarity, 1, 3);
+        Place(lblDenoise, 2, 3); Place(numDenoise, 3, 3);
+        Place(btnResetVoiceSettings, 2, 4);
+        settingsGrid.SetColumnSpan(btnResetVoiceSettings, 2);
+        grpVoiceSettings.Controls.Add(settingsGrid);
+
+        var optionsControls = new Control[] {
+            chkRetryFailed, chkAutoSplit, chkSkipExisting, chkAutoJoin,
+            chkDeleteSegments, lblSplitChars, txtSplitChars, btnAdvancedSettings
+        };
+        foreach (var c in optionsControls) grpOptions.Controls.Remove(c);
+        var optionsGrid = new TableLayoutPanel {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4,
+            Margin = Padding.Empty, Padding = new Padding(3, 2, 3, 1)
+        };
+        optionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
+        optionsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+        for (int i = 0; i < 4; i++)
+            optionsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        void Opt(Control c, int col, int row)
+        {
+            c.Dock = DockStyle.Fill;
+            c.Margin = new Padding(2);
+            optionsGrid.Controls.Add(c, col, row);
+        }
+        Opt(chkRetryFailed, 0, 0); Opt(chkAutoSplit, 1, 0);
+        Opt(chkSkipExisting, 0, 1); Opt(chkAutoJoin, 1, 1);
+        Opt(chkDeleteSegments, 0, 2);
+        var splitRow = new TableLayoutPanel { Dock = DockStyle.Fill,
+            ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        splitRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+        splitRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        lblSplitChars.Dock = DockStyle.Fill;
+        lblSplitChars.TextAlign = ContentAlignment.MiddleLeft;
+        txtSplitChars.Dock = DockStyle.Fill;
+        splitRow.Controls.Add(lblSplitChars, 0, 0);
+        splitRow.Controls.Add(txtSplitChars, 1, 0);
+        Opt(splitRow, 1, 2);
+        Opt(btnAdvancedSettings, 0, 3);
+        optionsGrid.SetColumnSpan(btnAdvancedSettings, 2);
+        grpOptions.Controls.Add(optionsGrid);
     }
 
     private void RefreshModernNavigation()
