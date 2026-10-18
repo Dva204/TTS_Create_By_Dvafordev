@@ -7,9 +7,7 @@ namespace TTS_Create_By_DvaForDev
         {
             ApplicationConfiguration.Initialize();
 
-            // Normal maximized window: fills the working area while keeping
-            // the Windows title bar, taskbar, Restore and Minimize controls.
-            // Users can restore the window at any time.
+            // Open as a normal resizable window instead of maximizing on startup.
             using var mainWindow = new Form1 {
                 StartPosition = FormStartPosition.CenterScreen,
                 WindowState = FormWindowState.Maximized

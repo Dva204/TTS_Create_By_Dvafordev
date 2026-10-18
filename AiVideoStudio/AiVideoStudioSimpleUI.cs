@@ -130,10 +130,24 @@ public sealed partial class AiVideoStudioControl
         var export = RenderButton("btnStudioExportYouTube");
         var stop = RenderButton("btnStudioStopRender");
 
-        // No permanent preview, CapCut sidebars, media library or thumbnail
-        // strip in the minimal UI; keep the full-width editable scene grid.
-        workspaceSplit.Panel2Collapsed = true;
-        workspaceSplit.BackColor = Color.White;
+        // Preserve the existing scene editor and live video preview.
+        // Reusing the existing preview controls retains playback handlers.
+        // Modern workspace: scene table and embedded player side by side.
+        workspaceSplit.Panel2Collapsed = false;
+        workspaceSplit.Orientation = Orientation.Vertical;
+        workspaceSplit.BackColor = Color.FromArgb(226, 233, 240);
+        workspaceSplit.SplitterWidth = 6;
+        void ResizeWorkspace()
+        {
+            if (workspaceSplit.IsDisposed || workspaceSplit.Width < 420) return;
+            var usable = workspaceSplit.Width - workspaceSplit.SplitterWidth;
+            var target = (int)(usable * (workspaceSplit.Width >= 1000 ? 0.54 : 0.50));
+            if (workspaceSplit.SplitterDistance != target)
+                workspaceSplit.SplitterDistance = target;
+        }
+        workspaceSplit.HandleCreated += (_, _) => BeginInvoke((Action)ResizeWorkspace);
+        // The divider remains draggable; initial sizing happens once.
+
         var gridHost = workspaceSplit.Panel1.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
         if (gridHost is not null)
         {

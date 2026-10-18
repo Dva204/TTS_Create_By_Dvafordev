@@ -195,22 +195,7 @@ public sealed partial class AiVideoStudioControl
                 {
                     // The simple layout has no embedded player. Play the
                     // preview in the user's default Windows video application.
-                    if (simpleStudioLayout)
-                    {
-                        try
-                        {
-                            Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true });
-                        }
-                        catch (System.ComponentModel.Win32Exception)
-                        {
-                            // MP4 was already rendered successfully; a missing
-                            // default video player must not report render failure.
-                            status.Text = "Đã tạo video xem thử: " + destination +
-                                          ". Dùng Mở output để tìm MP4.";
-                        }
-                    }
-                    else
-                        OpenVideoInStudio(destination);
+                    OpenVideoInStudio(destination);
                 }
             }
             else
