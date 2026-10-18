@@ -1,0 +1,363 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+
+namespace TTS_Create_By_DvaForDev.AiVideoStudio;
+
+/// <summary>A saved, editable storyboard. Does not invoke any AI services.</summary>
+public sealed class AiVideoProject
+{
+    public int SchemaVersion { get; set; } = 1;
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Title { get; set; } = "Dự án YouTube mới";
+    public string Language { get; set; } = "en-US";
+    public string AspectRatio { get; set; } = "16:9";
+    public string AudioPath { get; set; } = "";
+    public string SubtitlePath { get; set; } = "";
+    public string ImageFolder { get; set; } = "";
+    // V2 composer: TTS remains the master audio; these tracks are optional.
+    public string MusicPath { get; set; } = "";
+    public double MusicVolume { get; set; } = 0.12;
+    public bool BurnSubtitles { get; set; } = false;
+    // V2.1-A: 1.0 = original 720p render; 1.5 = native 1080p;
+    // 2.0 = native 1440p supersampling followed by Lanczos downsampling.
+    public double WhiteboardRenderScale { get; set; } = 1.5;
+    public double WhiteboardSharpenAmount { get; set; } = 0.15;
+    // "classic" preserves prior fade; "source-mask" reveals the exact
+    // source color plate through the engine's progressive contour mask.
+    public string WhiteboardRevealMode { get; set; } = "source-mask";
+    public string WhiteboardStrokeDetail { get; set; } = "rich";
+    public string WhiteboardAnimationPreset { get; set; } = "classic";
+    public WhiteboardRenderOptions WhiteboardOptions { get; set; } = new();
+    public List<AiVideoScene> Scenes { get; set; } = new();
+    [JsonIgnore]
+    public string FilePath { get; set; } = "";
+}
+
+public sealed class AiVideoScene
+{
+    public int Index { get; set; }
+    public int CueFrom { get; set; }
+    public int CueTo { get; set; }
+    public long StartMs { get; set; }
+    public long EndMs { get; set; }
+    public string StyleId { get; set; } = "whiteboard";
+    // "cut" or a brief fade from white at the start of this scene.
+    public string Transition { get; set; } = "fade";
+    public string ImagePath { get; set; } = "";
+    public string Narration { get; set; } = "";
+    public string Notes { get; set; } = "";
+    // Relative to the start of this scene; user-editable AI Director suggestions.
+    public List<AiVideoDirectionEvent> DirectionEvents { get; set; } = new();
+    [JsonIgnore]
+    public string DirectorSummary =>
+        DirectionEvents is { Count: > 0 }
+            ? string.Join(" + ", DirectionEvents.Select(e =>
+                e.Kind == "text" ? "Chữ: " + e.Text : $"Zoom {e.Zoom:0.00}x"))
+            : "Chưa có";
+}
+
+public sealed class AiVideoDirectionEvent
+{
+    // "text" or "zoom"; only these event types are supported in V1.2.
+    public string Kind { get; set; } = "text";
+    public int StartMs { get; set; }
+    public int DurationMs { get; set; } = 1400;
+    public string Text { get; set; } = "";
+    public double Zoom { get; set; } = 1.10;
+    public double FocusX { get; set; } = .5;
+    public double FocusY { get; set; } = .5;
+    public string Reason { get; set; } = "";
+    public string Source { get; set; } = "";
+}
+
+public sealed record AiSubtitleCue(int Index, long StartMs, long EndMs, string Text);
+
+public static class AiVideoProjectService
+{
+    public static readonly string[] SupportedStyles = {
+        "whiteboard", "layer", "map", "timeline", "image-motion",
+        "infographic", "text", "image-story"
+    };
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
+
+    private static readonly Regex TimeLineRegex = new(
+        @"(?<sh>\d{2,}):(?<sm>\d{2}):(?<ss>\d{2})[,.](?<sms>\d{3})\s*-->\s*(?<eh>\d{2,}):(?<em>\d{2}):(?<es>\d{2})[,.](?<ems>\d{3})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    public static List<AiSubtitleCue> ReadSrt(string path)
+    {
+        if (!File.Exists(path)) throw new FileNotFoundException("Không thấy file SRT.", path);
+        var text = File.ReadAllText(path).TrimStart('\uFEFF').Replace("\r\n", "\n").Trim();
+        var chunks = Regex.Split(text, @"\n\s*\n");
+        var cues = new List<AiSubtitleCue>();
+        foreach (var chunk in chunks)
+        {
+            if (string.IsNullOrWhiteSpace(chunk)) continue;
+            var lines = chunk.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            int idx = Array.FindIndex(lines, line => line.Contains("-->", StringComparison.Ordinal));
+            if (idx < 0) throw new InvalidDataException("Phụ đề thiếu dòng thời gian: " + chunk[..Math.Min(chunk.Length, 80)]);
+            var match = TimeLineRegex.Match(lines[idx]);
+            if (!match.Success) throw new InvalidDataException("Định dạng thời gian SRT không hợp lệ: " + lines[idx]);
+            long start = Time(match, "s"), end = Time(match, "e");
+            if (start < 0 || end <= start) throw new InvalidDataException("Một mục SRT có thời lượng không hợp lệ.");
+            if (cues.Count > 0 && start < cues[^1].StartMs)
+                throw new InvalidDataException("SRT không được sắp xếp theo thời gian.");
+            string narration = string.Join(" ", lines.Skip(idx + 1));
+            cues.Add(new AiSubtitleCue(cues.Count + 1, start, end, narration));
+        }
+        if (cues.Count == 0) throw new InvalidDataException("Không tìm thấy phụ đề SRT.");
+        return cues;
+    }
+
+    private static long Time(Match match, string key) =>
+        ((long)int.Parse(match.Groups[key + "h"].Value, CultureInfo.InvariantCulture) * 3600000)
+        + ((long)int.Parse(match.Groups[key + "m"].Value, CultureInfo.InvariantCulture) * 60000)
+        + ((long)int.Parse(match.Groups[key + "s"].Value, CultureInfo.InvariantCulture) * 1000)
+        + int.Parse(match.Groups[key + "ms"].Value, CultureInfo.InvariantCulture);
+
+    public static string[] FindStoryboardImages(string? folder)
+    {
+        if (!Directory.Exists(folder)) return Array.Empty<string>();
+        return Directory.EnumerateFiles(folder!)
+            .Where(f => new[] { ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".svg" }
+                .Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+            .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// One illustration per scene, partitioning whole SRT cues into groups
+    /// nearest to equally spaced narration time. Never cuts inside a cue.
+    /// </summary>
+    public static List<AiVideoScene> GenerateByImageCount(
+        IReadOnlyList<AiSubtitleCue> cues, string imageFolder, string styleId = "image-motion")
+    {
+        var images = FindStoryboardImages(imageFolder);
+        if (images.Length == 0)
+            throw new InvalidDataException("Image folder has no usable illustration files.");
+        if (images.Length > cues.Count)
+            throw new InvalidDataException(
+                $"There are {images.Length} images but only {cues.Count} SRT cues. " +
+                "One image per scene requires at least one SRT cue per image.");
+        if (images.Length > 200)
+            throw new InvalidDataException("Preview supports at most 200 scenes per project.");
+        if (!SupportedStyles.Contains(styleId))
+            throw new InvalidDataException("Unsupported scene style.");
+        if (cues.Count == 0) throw new InvalidDataException("The SRT file is empty.");
+        long totalMs = cues[^1].EndMs;
+        var boundaries = new List<int> { 0 };
+        for (int group = 1; group < images.Length; group++)
+        {
+            int low = boundaries[^1] + 1;
+            int high = cues.Count - (images.Length - group);
+            double target = totalMs * ((double)group / images.Length);
+            int nearest = low;
+            for (int k = low + 1; k <= high; k++)
+            {
+                if (Math.Abs(cues[k].StartMs - target) < Math.Abs(cues[nearest].StartMs - target))
+                    nearest = k;
+            }
+            boundaries.Add(nearest);
+        }
+        boundaries.Add(cues.Count);
+        var scenes = new List<AiVideoScene>();
+        for (int i = 0; i < images.Length; i++)
+        {
+            int first = boundaries[i], last = boundaries[i + 1] - 1;
+            scenes.Add(new AiVideoScene {
+                Index = i + 1, CueFrom = first + 1, CueTo = last + 1,
+                StartMs = i == 0 ? 0 : cues[first].StartMs,
+                EndMs = last + 1 < cues.Count ? cues[last + 1].StartMs : cues[last].EndMs,
+                StyleId = styleId, ImagePath = images[i],
+                Narration = string.Join(" ", cues.Skip(first).Take(last - first + 1)
+                    .Select(c => c.Text))
+            });
+        }
+        ValidateScenes(scenes);
+        return scenes;
+    }
+
+    /// <summary>
+    /// Moves one whole SRT cue across the border of two adjacent scenes.
+    /// Negative direction moves one cue from scene to following scene;
+    /// positive direction moves from following scene to this scene.
+    /// </summary>
+    public static void ShiftCueBoundary(IList<AiVideoScene> scenes,
+        IReadOnlyList<AiSubtitleCue> cues, int index, int direction)
+    {
+        if (index < 0 || index >= scenes.Count - 1)
+            throw new ArgumentOutOfRangeException(nameof(index));
+        if (direction != 1 && direction != -1)
+            throw new ArgumentOutOfRangeException(nameof(direction));
+        var left = scenes[index];
+        var right = scenes[index + 1];
+        int newEnd = left.CueTo + direction;
+        if (newEnd < left.CueFrom || newEnd >= right.CueTo)
+            throw new InvalidDataException("Each scene needs at least one SRT cue.");
+        if (newEnd >= cues.Count)
+            throw new InvalidDataException("Cue does not exist in SRT.");
+        long cutTime = cues[newEnd].StartMs;
+        if (cutTime <= left.StartMs || cutTime >= right.EndMs)
+            throw new InvalidDataException("Invalid SRT time boundary.");
+        left.CueTo = newEnd;
+        right.CueFrom = newEnd + 1;
+        left.EndMs = cutTime;
+        right.StartMs = cutTime;
+        left.Narration = string.Join(" ", cues.Skip(left.CueFrom - 1)
+            .Take(left.CueTo - left.CueFrom + 1).Select(c => c.Text));
+        right.Narration = string.Join(" ", cues.Skip(right.CueFrom - 1)
+            .Take(right.CueTo - right.CueFrom + 1).Select(c => c.Text));
+        // Director timings would become invalid when the boundary moves.
+        left.DirectionEvents?.Clear();
+        right.DirectionEvents?.Clear();
+        ValidateScenes(scenes.ToList());
+    }
+
+    public static List<AiVideoScene> GenerateStoryboard(
+        IReadOnlyList<AiSubtitleCue> cues, int cuesPerScene, string? imageFolder, string styleId = "whiteboard")
+    {
+        if (cues.Count == 0) throw new ArgumentException("Cần ít nhất một đoạn SRT.", nameof(cues));
+        if (cuesPerScene < 1 || cuesPerScene > 20) throw new ArgumentOutOfRangeException(nameof(cuesPerScene));
+        if (!SupportedStyles.Contains(styleId)) throw new ArgumentException("Kiểu video chưa được hỗ trợ.", nameof(styleId));
+        var images = FindStoryboardImages(imageFolder);
+        var scenes = new List<AiVideoScene>();
+        for (int first = 0; first < cues.Count; first += cuesPerScene)
+        {
+            int last = Math.Min(first + cuesPerScene, cues.Count) - 1;
+            int sequence = scenes.Count;
+            scenes.Add(new AiVideoScene {
+                Index = sequence + 1,
+                CueFrom = cues[first].Index,
+                CueTo = cues[last].Index,
+                StartMs = first == 0 ? 0 : cues[first].StartMs,
+                EndMs = last + 1 < cues.Count ? cues[last + 1].StartMs : cues[last].EndMs,
+                StyleId = styleId,
+                ImagePath = sequence < images.Length ? images[sequence] : "",
+                Narration = string.Join(" ", cues.Skip(first).Take(last - first + 1).Select(c => c.Text))
+            });
+        }
+        ValidateScenes(scenes);
+        return scenes;
+    }
+
+    public static void ValidateScenes(IReadOnlyList<AiVideoScene> scenes)
+    {
+        int expectedCue = 1;
+        long previousEnd = 0;
+        for (int i = 0; i < scenes.Count; i++)
+        {
+            var scene = scenes[i];
+            if (scene.Index != i + 1 || scene.CueFrom != expectedCue ||
+                scene.CueTo < scene.CueFrom || scene.StartMs != previousEnd ||
+                scene.EndMs <= scene.StartMs || !SupportedStyles.Contains(scene.StyleId) ||
+                scene.Transition is not ("fade" or "cut"))
+                throw new InvalidDataException($"Cảnh {i + 1} có mốc SRT/thời gian/kiểu hiệu ứng không hợp lệ.");
+            if ((scene.DirectionEvents?.Count ?? 0) > 4)
+                throw new InvalidDataException($"Cảnh {i + 1} có quá nhiều hiệu ứng Director (tối đa 4).");
+            if ((scene.DirectionEvents?.Count(e => e.Kind == "zoom") ?? 0) > 1)
+                throw new InvalidDataException($"Cảnh {i + 1} chỉ hỗ trợ một zoom.");
+            foreach (var shot in scene.DirectionEvents ?? new())
+            {
+                if (shot.Kind is not ("text" or "zoom") ||
+                    shot.StartMs < 0 || shot.DurationMs <= 0 ||
+                    (long)shot.StartMs + shot.DurationMs > scene.EndMs - scene.StartMs ||
+                    shot.Zoom < 1 || shot.Zoom > 1.22 ||
+                    shot.FocusX < 0 || shot.FocusX > 1 ||
+                    shot.FocusY < 0 || shot.FocusY > 1 ||
+                    shot.Text.Length > 90)
+                    throw new InvalidDataException($"Hiệu ứng Director ở cảnh {i + 1} không hợp lệ.");
+            }
+            expectedCue = scene.CueTo + 1;
+            previousEnd = scene.EndMs;
+        }
+    }
+
+    public static void ValidateComposer(AiVideoProject project)
+    {
+        if (!double.IsFinite(project.MusicVolume) ||
+            project.MusicVolume < 0 || project.MusicVolume > 0.5)
+            throw new InvalidDataException("Âm lượng nhạc nền phải trong khoảng 0–50%.");
+        if (project.BurnSubtitles && string.IsNullOrWhiteSpace(project.SubtitlePath))
+            throw new InvalidDataException("Bật phụ đề cần có file SRT.");
+        if (!double.IsFinite(project.WhiteboardRenderScale) ||
+            project.WhiteboardRenderScale < 1.0 || project.WhiteboardRenderScale > 2.0)
+            throw new InvalidDataException("Render scale Whiteboard phải từ 1.0x đến 2.0x.");
+        if (!double.IsFinite(project.WhiteboardSharpenAmount) ||
+            project.WhiteboardSharpenAmount < 0 || project.WhiteboardSharpenAmount > 0.5)
+            throw new InvalidDataException("Độ nét Whiteboard phải từ 0 đến 0.5.");
+        if (project.WhiteboardStrokeDetail is not ("balanced" or "rich" or "max"))
+            throw new InvalidDataException("Unsupported Whiteboard stroke detail.");
+        if (project.WhiteboardAnimationPreset is not ("classic" or "block-speedpaint"))
+            throw new InvalidDataException("Unsupported Whiteboard animation preset.");
+        if (project.WhiteboardRevealMode is not ("classic" or "source-mask"))
+            throw new InvalidDataException("Chế độ màu Whiteboard không được hỗ trợ.");
+    }
+
+    public static void Save(AiVideoProject project, string targetFile)
+    {
+        if (project.SchemaVersion != 1) throw new InvalidDataException("Chỉ hỗ trợ project schema v1.");
+        ValidateComposer(project);
+        ValidateScenes(project.Scenes);
+        var path = Path.GetFullPath(targetFile);
+        string root = Path.GetDirectoryName(path) ?? throw new InvalidDataException("Thư mục project không hợp lệ.");
+        Directory.CreateDirectory(root);
+        // Do not mutate in-memory absolute paths; serialize a detached clone.
+        var clone = JsonSerializer.Deserialize<AiVideoProject>(JsonSerializer.Serialize(project, JsonOptions), JsonOptions)!;
+        clone.FilePath = "";
+        clone.AudioPath = ToRelative(root, clone.AudioPath);
+        clone.SubtitlePath = ToRelative(root, clone.SubtitlePath);
+        clone.ImageFolder = ToRelative(root, clone.ImageFolder);
+        clone.MusicPath = ToRelative(root, clone.MusicPath);
+        foreach (var scene in clone.Scenes)
+            scene.ImagePath = ToRelative(root, scene.ImagePath);
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(clone, JsonOptions));
+            File.Move(temp, path, overwrite: true);
+            project.FilePath = path;
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+    }
+
+    public static AiVideoProject Load(string projectFile)
+    {
+        var path = Path.GetFullPath(projectFile);
+        var project = JsonSerializer.Deserialize<AiVideoProject>(File.ReadAllText(path), JsonOptions)
+                      ?? throw new InvalidDataException("JSON project trống.");
+        if (project.SchemaVersion != 1) throw new InvalidDataException("Phiên bản JSON chưa hỗ trợ.");
+        project.Scenes ??= new();
+        ValidateComposer(project);
+        ValidateScenes(project.Scenes);
+        string root = Path.GetDirectoryName(path)!;
+        project.AudioPath = ToAbsolute(root, project.AudioPath);
+        project.SubtitlePath = ToAbsolute(root, project.SubtitlePath);
+        project.ImageFolder = ToAbsolute(root, project.ImageFolder);
+        project.MusicPath = ToAbsolute(root, project.MusicPath);
+        foreach (var scene in project.Scenes)
+            scene.ImagePath = ToAbsolute(root, scene.ImagePath);
+        project.FilePath = path;
+        return project;
+    }
+
+    private static string ToRelative(string root, string? path) =>
+        string.IsNullOrWhiteSpace(path) ? "" : Path.GetRelativePath(root, Path.GetFullPath(path));
+
+    private static string ToAbsolute(string root, string? path) =>
+        string.IsNullOrWhiteSpace(path) ? "" : Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root, path));
+}

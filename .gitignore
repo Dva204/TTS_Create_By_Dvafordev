@@ -53,3 +53,12 @@ backend/data/voices/
 # Optional isolated CPU VieNeu environment (do not commit model/dependencies)
 backend/.venv-vieneu/
 backend/data/logs/
+
+
+# Independent TTS / Whiteboard development data (never commit private voices)
+Apps/TtsStudio/backend/.venv*/
+Apps/TtsStudio/backend/data/
+Apps/TtsStudio/backend/**/__pycache__/
+Apps/WhiteboardStudio/whiteboard_tools/**/__pycache__/
+Apps/WhiteboardStudio/**/*.whiteboard_prepare/
+Apps/WhiteboardStudio/*.mp4

@@ -10,6 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Apps\**\*.cs;Shared\**\*.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="backend\**\*" Exclude="backend\.venv\**\*;backend\**\__pycache__\**\*;backend\data\**\*;backend\test_*.py;backend\test_output.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DvaForDev.TtsStudio</AssemblyName>
+    <RootNamespace>TTS_Create_By_DvaForDev</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\DvaForDev.Shared.csproj"/>
+    <Content Include="backend\**\*.py;backend\requirements.txt;backend\install_vieneu_cpu.ps1"
+      Exclude="backend\**\__pycache__\**\*;backend\test_*.py"
+      CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+</Project>
