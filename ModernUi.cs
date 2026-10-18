@@ -112,10 +112,41 @@ public partial class Form1
         {
             Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(115, 125, 139),
-            Text = "Không gian làm việc • Các công cụ hiện tại được giữ nguyên"
+            Text = "Tạo giọng đọc, phân cảnh và video trong một không gian làm việc"
         };
         header.Controls.Add(pageHeading, 0, 0);
         header.Controls.Add(pageSubtitle, 0, 1);
+        header.ColumnCount = 2;
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 186));
+        var reconnect = new Button {
+            Text = "⟳  Kết nối backend", Width = 174, Height = 35,
+            FlatStyle = FlatStyle.Flat, Anchor = AnchorStyles.Right,
+            BackColor = Color.FromArgb(235, 247, 240),
+            ForeColor = uiPrimary, Cursor = Cursors.Hand
+        };
+        reconnect.FlatAppearance.BorderColor = Color.FromArgb(198, 228, 213);
+        reconnect.Click += async (_, _) =>
+        {
+            reconnect.Enabled = false;
+            try
+            {
+                await backend.ReconnectAsync(settings.PythonExecutable, lifetime.Token);
+                await RefreshStatus(lifetime.Token);
+                await RefreshVoices(null, lifetime.Token);
+                WriteLog("Đã kiểm tra và kết nối lại backend TTS.");
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+            catch (Exception ex)
+            {
+                WriteLog("Không thể kết nối lại backend: " + ex.Message);
+                MessageBox.Show(this, ex.Message, "Kết nối backend",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally { if (!reconnect.IsDisposed) reconnect.Enabled = true; }
+        };
+        header.Controls.Add(reconnect, 1, 0);
+        header.SetRowSpan(reconnect, 2);
         shell.Controls.Add(nav, 0, 0);
         shell.SetRowSpan(nav, 2);
         shell.Controls.Add(header, 1, 0);
