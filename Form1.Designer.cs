@@ -1027,7 +1027,6 @@ partial class Form1
         grpOptions.Controls.Add(chkDeleteSegments);
         grpOptions.Controls.Add(lblSplitChars);
         grpOptions.Controls.Add(txtSplitChars);
-        grpOptions.Controls.Add(btnAdvancedSettings);
         grpOptions.Dock = DockStyle.Fill;
         grpOptions.Location = new Point(903, 3);
         grpOptions.Name = "grpOptions";

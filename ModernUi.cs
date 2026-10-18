@@ -345,7 +345,7 @@ public partial class Form1
 
         var optionsControls = new Control[] {
             chkRetryFailed, chkAutoSplit, chkSkipExisting, chkAutoJoin,
-            chkDeleteSegments, lblSplitChars, txtSplitChars, btnAdvancedSettings
+            chkDeleteSegments, lblSplitChars, txtSplitChars
         };
         foreach (var c in optionsControls) grpOptions.Controls.Remove(c);
         var optionsGrid = new TableLayoutPanel {
@@ -375,15 +375,17 @@ public partial class Form1
         splitRow.Controls.Add(lblSplitChars, 0, 0);
         splitRow.Controls.Add(txtSplitChars, 1, 0);
         Opt(splitRow, 1, 2);
-        Opt(btnAdvancedSettings, 0, 3);
-        optionsGrid.SetColumnSpan(btnAdvancedSettings, 2);
         chkRetryFailed.Text = "Thử lại lỗi";
         chkAutoSplit.Text = "Tự chia đoạn";
         chkSkipExisting.Text = "Bỏ qua đã có";
         chkAutoJoin.Text = "Tự ghép";
         chkDeleteSegments.Text = "Xóa đoạn tạm";
         lblSplitChars.Text = "Tách:";
-        btnAdvancedSettings.Text = "Thiết lập nâng cao";
+        // No advanced button: only three option rows are needed.
+        optionsGrid.RowCount = 3;
+        optionsGrid.RowStyles.Clear();
+        for (int i = 0; i < 3; i++)
+            optionsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 3f));
         grpOptions.Controls.Add(optionsGrid);
     }
 
