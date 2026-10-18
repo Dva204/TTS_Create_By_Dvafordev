@@ -125,6 +125,7 @@ public partial class Form1
         shell.Controls.Add(workspace, 1, 1);
         Controls.Add(shell);
         ApplyModernControlStyles(mainTabControl);
+        ApplyLegacyWorkspaceStyles();
         mainTabControl.SelectedIndexChanged += (_, _) => RefreshModernNavigation();
         RefreshModernNavigation();
         MinimumSize = new Size(1030, 680);
@@ -165,6 +166,71 @@ public partial class Form1
                 input.BackColor = Color.White;
             }
             if (child.HasChildren) ApplyModernControlStyles(child);
+        }
+    }
+
+    // Apply a consistent visual language without moving legacy controls or
+    // disturbing the event bindings of the existing production workflows.
+    private void ApplyLegacyWorkspaceStyles()
+    {
+        var tabs = mainTabControl.TabPages;
+        for (int i = 0; i < Math.Min(4, tabs.Count); i++)
+        {
+            var page = tabs[i];
+            page.BackColor = uiBackground;
+            StyleLegacyChildren(page);
+        }
+    }
+
+    private void StyleLegacyChildren(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            switch (child)
+            {
+                case GroupBox group:
+                    group.ForeColor = uiText;
+                    group.Font = new Font("Segoe UI Semibold", 9f, FontStyle.Bold);
+                    group.Padding = new Padding(9, 12, 9, 8);
+                    break;
+                case DataGridView table:
+                    table.BackgroundColor = Color.White;
+                    table.GridColor = Color.FromArgb(228, 233, 239);
+                    table.BorderStyle = BorderStyle.None;
+                    table.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+                    table.ColumnHeadersHeight = Math.Max(table.ColumnHeadersHeight, 36);
+                    table.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+                    table.EnableHeadersVisualStyles = false;
+                    table.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(231, 239, 246);
+                    table.ColumnHeadersDefaultCellStyle.ForeColor = uiText;
+                    table.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(231, 239, 246);
+                    table.DefaultCellStyle.BackColor = Color.White;
+                    table.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 251, 253);
+                    table.DefaultCellStyle.SelectionBackColor = Color.FromArgb(215, 239, 229);
+                    table.DefaultCellStyle.SelectionForeColor = uiText;
+                    break;
+                case Button button:
+                    button.Cursor = Cursors.Hand;
+                    button.FlatStyle = FlatStyle.Flat;
+                    button.FlatAppearance.BorderColor = Color.FromArgb(207, 219, 229);
+                    button.FlatAppearance.BorderSize = 1;
+                    if (button.BackColor == SystemColors.Control)
+                        button.BackColor = Color.White;
+                    // Preserve stronger existing semantics, e.g. green Run,
+                    // red Stop and blue Save buttons.
+                    if (button.BackColor == Color.White)
+                        button.ForeColor = uiText;
+                    break;
+                case TextBox entry when !entry.Multiline:
+                    entry.BorderStyle = BorderStyle.FixedSingle;
+                    entry.BackColor = Color.White;
+                    break;
+                case ComboBox combo:
+                    combo.FlatStyle = FlatStyle.Flat;
+                    combo.BackColor = Color.White;
+                    break;
+            }
+            if (child.HasChildren) StyleLegacyChildren(child);
         }
     }
 
