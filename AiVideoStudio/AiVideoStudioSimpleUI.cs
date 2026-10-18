@@ -151,14 +151,15 @@ public sealed partial class AiVideoStudioControl
         var gridHost = workspaceSplit.Panel1.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
         if (gridHost is not null)
         {
-            gridHost.Padding = new Padding(4, 2, 4, 0);
-            gridHost.RowStyles[0].Height = 29;
+            gridHost.Padding = new Padding(8, 5, 8, 5);
+            gridHost.BackColor = Color.White;
+            gridHost.RowStyles[0].Height = 34;
         }
 
         view.RowStyles[0].SizeType = SizeType.Absolute;
         view.RowStyles[0].Height = 63;
         view.RowStyles[1].SizeType = SizeType.Absolute;
-        view.RowStyles[1].Height = 337;
+        view.RowStyles[1].Height = 359;
         view.RowStyles[2].SizeType = SizeType.Percent;
         view.RowStyles[2].Height = 100;
         view.RowStyles[3].SizeType = SizeType.Absolute;
@@ -213,7 +214,7 @@ public sealed partial class AiVideoStudioControl
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         sources.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 216));
-        foreach (int height in new[] {37, 37, 37, 37, 176, 0})
+        foreach (int height in new[] {39, 39, 39, 39, 193, 0})
             sources.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
 
         void SourceRow(int row, string label, TextBox text, Button browse)
@@ -435,6 +436,51 @@ public sealed partial class AiVideoStudioControl
 
         whiteboardPanel.Controls.Add(whiteboardActions);
         actionArea.Controls.Add(whiteboardPanel, 1, 0);
+        // A resizable, airy workspace: keep input paths compact and use
+        // two separate functional cards instead of one overflowing toolbar.
+        sources.Padding = new Padding(16, 12, 16, 10);
+        sources.BackColor = Color.FromArgb(250, 252, 254);
+        sources.ColumnStyles[0].Width = 126;
+        sources.ColumnStyles[2].Width = 205;
+        foreach (Control item in sources.Controls)
+        {
+            if (item is TextBox box)
+            {
+                box.Font = new Font("Segoe UI", 10f);
+                box.BorderStyle = BorderStyle.FixedSingle;
+                box.BackColor = Color.White;
+            }
+        }
+        projectPanel.BackColor = Color.White;
+        whiteboardPanel.BackColor = Color.White;
+        projectPanel.ForeColor = Color.FromArgb(36, 55, 72);
+        whiteboardPanel.ForeColor = Color.FromArgb(36, 55, 72);
+        essentials.Padding = new Padding(6, 4, 4, 4);
+        essentials.Margin = Padding.Empty;
+        foreach (Control action in essentials.Controls)
+        {
+            if (action is not Button b) continue;
+            b.FlatStyle = FlatStyle.Flat;
+            b.FlatAppearance.BorderColor = Color.FromArgb(215, 225, 233);
+            b.FlatAppearance.BorderSize = 1;
+            b.Height = 38;
+            b.Margin = new Padding(3, 4, 5, 4);
+            b.Cursor = Cursors.Hand;
+        }
+        import.BackColor = Color.FromArgb(222, 239, 250);
+        import.ForeColor = Color.FromArgb(28, 77, 125);
+        clearList.BackColor = Color.FromArgb(255, 245, 231);
+        whiteboardActions.Padding = new Padding(10, 5, 10, 3);
+        whiteboardActions.RowStyles[0].Height = 35;
+        whiteboardActions.RowStyles[1].Height = 35;
+        whiteboardActions.RowStyles[2].Height = 35;
+        whiteboardActions.RowStyles[3].Height = 35;
+        whiteboardMore.FlatStyle = FlatStyle.Flat;
+        receiveSettings.FlatStyle = FlatStyle.Flat;
+        whiteboardMore.FlatAppearance.BorderColor = Color.FromArgb(212, 222, 230);
+        receiveSettings.FlatAppearance.BorderColor = Color.FromArgb(212, 222, 230);
+        receiveSettings.BackColor = Color.FromArgb(233, 245, 238);
+        receiveSettings.ForeColor = Color.FromArgb(29, 114, 82);
         sources.Controls.Add(actionArea, 1, 4);
         sources.SetColumnSpan(actionArea, 2);
         sources.Controls.Add(new Label {
@@ -529,7 +575,7 @@ public sealed partial class AiVideoStudioControl
             {
                 advanced.Visible = show;
                 sources.RowStyles[5].Height = show ? 118 : 0;
-                view.RowStyles[1].Height = show ? 463 : 337;
+                view.RowStyles[1].Height = show ? 485 : 359;
                 advancedButton.Text = show ? "Ẩn tùy chọn ▴" : "Tùy chọn ▾";
                 storyboardGrid.Columns.Cast<DataGridViewColumn>()
                     .First(c => c.DataPropertyName == nameof(AiVideoScene.StartMs)).Visible = show;
