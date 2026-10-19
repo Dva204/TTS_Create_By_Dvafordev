@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Buffers.Binary;
 using System.Text;
 
 namespace TTS_Create_By_DvaForDev.Services;
@@ -13,6 +14,10 @@ public static class SrtBatchTimelineService
     private const int Rate = 24000;
     private const int BytesPerSample = 2;
     private const int BytesPerSecond = Rate * BytesPerSample;
+    // A few milliseconds can result from MP3 encoder padding/resampling.
+    // Compress the WHOLE waveform very slightly rather than removing speech.
+    private const double MaxAutoFitRate = 1.02; // max ~2% faster
+    private const double MaxAutoFitSeconds = 0.15;
 
     public static IReadOnlyList<SubtitleCue> Parse(string source) =>
         SrtQualityService.Read(source).OrderBy(x => x.Start).ToArray();
@@ -94,8 +99,37 @@ public static class SrtBatchTimelineService
         }
     }
 
+    /// <summary>
+    /// Resample the entire PCM signal into the specified number of samples.
+    /// This preserves the beginning and ending of the recording, with no
+    /// dropped words. Only call for a slight duration overrun (<2%, 150ms).
+    /// A pitch change below 2% is preferable to dropping tail samples.
+    /// </summary>
+    private static byte[] FitSmallOverrun(byte[] input, int targetSamples)
+    {
+        int sourceSamples = input.Length / BytesPerSample;
+        if (targetSamples < 2 || sourceSamples <= targetSamples)
+            throw new ArgumentException("Expected a small positive overshoot.");
+        var output = new byte[checked(targetSamples * BytesPerSample)];
+        double ratio = (sourceSamples - 1d) / (targetSamples - 1d);
+        for (int i = 0; i < targetSamples; i++)
+        {
+            double sourceIndex = i * ratio;
+            int lower = Math.Min(sourceSamples - 1, (int)sourceIndex);
+            int upper = Math.Min(sourceSamples - 1, lower + 1);
+            double frac = sourceIndex - lower;
+            short low = BinaryPrimitives.ReadInt16LittleEndian(input.AsSpan(lower * 2, 2));
+            short high = BinaryPrimitives.ReadInt16LittleEndian(input.AsSpan(upper * 2, 2));
+            short value = (short)Math.Clamp((int)Math.Round(low + (high - low) * frac),
+                short.MinValue, short.MaxValue);
+            BinaryPrimitives.WriteInt16LittleEndian(output.AsSpan(i * 2, 2), value);
+        }
+        return output;
+    }
+
     public static async Task RenderAsync(IReadOnlyList<TimedAudioCue> cues,
-        string outputPath, CancellationToken token = default)
+        string outputPath, CancellationToken token = default,
+        Action<int, double, double>? onAutoFit = null)
     {
         Validate(cues);
         if (File.Exists(outputPath))
@@ -116,16 +150,23 @@ public static class SrtBatchTimelineService
                     await PadToAsync(output,SamplePosition(cue.Start)*BytesPerSample,token);
                     var pcm=await DecodePcmAsync(cue.AudioFile,token);
                     long available=(SamplePosition(cue.End)-SamplePosition(cue.Start))*BytesPerSample;
-                    // Accept a small rounding variation, never truncate words or
-                    // silently let synthesized speech overlap a later SRT cue.
-                    if(pcm.LongLength>available+Rate/5)
-                        throw new InvalidDataException(
-                            $"Cue {cue.Index}: TTS dài {pcm.LongLength/(double)BytesPerSecond:F2}s, " +
-                            $"khung SRT chỉ {(cue.End-cue.Start).TotalSeconds:F2}s. " +
-                            "Hãy rút ngắn câu hoặc tăng tốc độ đọc trước khi ghép.");
                     if (pcm.LongLength>available)
-                        throw new InvalidDataException(
-                            $"Cue {cue.Index}: audio dài hơn khung SRT. Hãy điều chỉnh trước khi ghép.");
+                    {
+                        double actualSeconds=pcm.LongLength/(double)BytesPerSecond;
+                        double targetSeconds=available/(double)BytesPerSecond;
+                        double excess=actualSeconds-targetSeconds;
+                        if (excess > MaxAutoFitSeconds + 1e-9 ||
+                            actualSeconds/targetSeconds > MaxAutoFitRate + 1e-9)
+                            throw new InvalidDataException(
+                                $"Cue {cue.Index}: audio dài {actualSeconds:F3}s, " +
+                                $"khung SRT {targetSeconds:F3}s (vượt {excess:F3}s). " +
+                                "Chỉ tự căn sai lệch nhỏ (tối đa 0,15 giây và 2%). " +
+                                "Hãy rút ngắn lời thoại hoặc tạo lại câu với tốc độ phù hợp.");
+                        // Slight resampling keeps all spoken content; do not
+                        // cut the last samples, including trailing phonemes.
+                        pcm=FitSmallOverrun(pcm,checked((int)(available/BytesPerSample)));
+                        onAutoFit?.Invoke(cue.Index,actualSeconds,targetSeconds);
+                    }
                     await output.WriteAsync(pcm,token);
                     await PadToAsync(output,SamplePosition(cue.End)*BytesPerSample,token);
                 }

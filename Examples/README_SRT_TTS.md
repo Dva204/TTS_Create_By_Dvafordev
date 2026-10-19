@@ -29,3 +29,21 @@ audio câu đó; file xuất hiện có không bị ghi đè.
 
 Dùng file TXT như trước bằng nút Nhập TXT. TTS giọng nói, model
 VieNeu/Chatterbox và dữ liệu giọng trong backend/data/voices không thay đổi.
+
+## Tự căn chênh lệch nhỏ giữa TTS và SRT
+
+Khi đoạn audio dài hơn khung SRT không quá **0,15 giây** và **2%**,
+bộ ghép sẽ nén thời gian **toàn bộ sóng âm** rất nhẹ (nội suy tuyến tính)
+thay vì cắt đuôi. Bản TTS gốc không bị thay đổi; log hiển thị câu
+được tự căn. Điều chỉnh nhẹ có thể thay đổi cao độ một chút.
+
+Ví dụ: SRT cho câu 4 là 28,000–35,000 (7 giây) nhưng MP3 được tạo dài
+7,020 giây. Bộ ghép tự căn về 7,000 giây và giữ toàn bộ mốc nghỉ.
+
+Nếu lệch quá ngưỡng, chương trình báo rõ số giây vượt và yêu cầu
+điều chỉnh lời thoại/tốc độ. Không kéo dài hay ghi đè file SRT gốc.
+
+Trong trường hợp nút Join báo lỗi từ bản cũ, hãy đóng ứng dụng,
+chạy lại bản đã cập nhật, nhập lại file SRT và chọn cùng giọng +
+thư mục output. Tích **Bỏ qua đã có** trước khi RUN BATCH để dùng lại
+các đoạn âm thanh hợp lệ; không cần tạo lại toàn bộ.

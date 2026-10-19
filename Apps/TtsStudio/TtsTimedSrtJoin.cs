@@ -43,7 +43,10 @@ public partial class Form1
                 name+"."+Guid.NewGuid().ToString("N")+".mp3");
             try
             {
-                await SrtBatchTimelineService.RenderAsync(cues,waveTmp,token);
+                await SrtBatchTimelineService.RenderAsync(cues,waveTmp,token,
+                    (index,actual,target)=>WriteLog(
+                        $"SRT câu {index}: tự căn audio {actual:F3}s → {target:F3}s " +
+                        "(chỉnh rất nhẹ tốc độ, giữ toàn bộ lời)."));
                 if(format=="wav")
                 {
                     File.Move(waveTmp,result);

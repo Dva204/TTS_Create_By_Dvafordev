@@ -123,6 +123,58 @@ class V4Smoke
             if(!refusedLong || File.Exists(Path.Combine(root,"should_not_exist.wav")))
                 throw new Exception("Overlong generated cue silently altered SRT timeline");
             Console.WriteLine("PASS: SRT audio silence and absolute timestamps, overlong cues rejected");
+
+            // A tiny TTS overrun should be fitted without deleting ending audio.
+            CreateTone(tone1,1.52);
+            int microFits=0;
+            string slightlyLong=Path.Combine(root,"slightly_long.wav");
+            SrtBatchTimelineService.RenderAsync(plan,slightlyLong,default,
+                (cue,original,target)=>{
+                    if(cue!=1 || Math.Abs(original-1.52)>.001 || Math.Abs(target-1.5)>.001)
+                        throw new Exception("Unexpected SRT timing adjustment");
+                    microFits++;
+                }).GetAwaiter().GetResult();
+            if(microFits!=1 || File.ReadAllBytes(slightlyLong).Length!=wave.Length)
+                throw new Exception("Small overrun did not fit exact SRT timeline");
+            var fittedAudio=File.ReadAllBytes(slightlyLong);
+            short EndOfFirstCue()=>BitConverter.ToInt16(fittedAudio,44+2*(int)(2.49*24000));
+            if(EndOfFirstCue()==0)
+                throw new Exception("Micro-fit erroneously truncated end of cue");
+            Console.WriteLine("PASS: 20-ms overshoot auto-fitted without dropping trailing speech");
+
+            // Optional real-MP3 end-to-end regression; run only when the folder
+            // is explicitly supplied by the developer, without touching it.
+            var realFolder=Environment.GetEnvironmentVariable("DVA_TTS_REAL_SRT_SAMPLE_DIR");
+            if(!string.IsNullOrWhiteSpace(realFolder) && Directory.Exists(realFolder))
+            {
+                var sampleSrt=Path.GetFullPath(Path.Combine(
+                    AppContext.BaseDirectory,"..","..","..","..","..","Examples",
+                    "SRT_tam_nghi_giua_cac_cau.srt"));
+                var texts=SrtQualityService.Read(File.ReadAllText(sampleSrt));
+                var filenames=Directory.GetFiles(realFolder,"*.mp3")
+                    .Where(f=>Path.GetFileName(f).Length>3 &&
+                        int.TryParse(Path.GetFileName(f)[..3],out int id) &&
+                        id is >= 1 and <= 4)
+                    .OrderBy(f=>f).ToArray();
+                if(filenames.Length!=4)throw new Exception(
+                    "Expected 4 real MP3 source files; got "+filenames.Length);
+                var inputs=texts.Select((cue,i)=>new TimedAudioCue(
+                    cue.Number,cue.Start,cue.End,cue.Text,filenames[i])).ToArray();
+                int actualFits=0;
+                var merged=Path.Combine(root,"real_input_with_srt_pauses.wav");
+                SrtBatchTimelineService.RenderAsync(inputs,merged,default,
+                    (cue,actual,target)=>{
+                        Console.WriteLine($"Micro-fit real cue {cue}: {actual:F3}s to {target:F3}s");
+                        actualFits++;
+                    }).GetAwaiter().GetResult();
+                if(new FileInfo(merged).Length!=44+35*24000*2)
+                    throw new Exception("Real MP3 merge did not preserve 35s SRT timeline");
+                var bytes=File.ReadAllBytes(merged);
+                if(BitConverter.ToInt16(bytes,44+2*(int)(7.5*24000))!=0 ||
+                   BitConverter.ToInt16(bytes,44+2*(int)(15.0*24000))!=0)
+                    throw new Exception("Real MP3 merge did not preserve silence");
+                Console.WriteLine($"PASS: all 4 real MP3 files merged to exact 35s SRT ({actualFits} micro-fits)");
+            }
             var timedProject=model with {Segments=new[]{
                 segments[0] with {SrtStartMilliseconds=1000,SrtEndMilliseconds=2500}}};
             var savedTimed=Path.Combine(root,"timed.ttsproject.json");
