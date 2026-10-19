@@ -39,3 +39,15 @@ py -3 -m unittest discover -s Apps/TtsStudio/tests -p test_*.py -v
 
 Never remove or commit private voice/reference assets and user voice.json edits.
 Do not push until explicitly requested.
+
+
+## Streamlined navigation (local UI update)
+
+- Sidebar contains just **Tạo audio**, **Giọng đọc** and **Quản lý**.
+- Horizontal contextual subtabs show only related workflows:
+  - Tạo audio: TTS/Hàng loạt, Dự án & Xuất, SRT & Căn chỉnh.
+  - Giọng đọc: Thư viện giọng, Clone giọng.
+  - Quản lý: Cài đặt, Backend & Hiệu năng.
+- Switching a main section returns to its last visited subtab.
+- Internal TabPage indexes remain unchanged to preserve existing event handlers.
+- Navigation has its own regression tests at normal and compact screen sizes.

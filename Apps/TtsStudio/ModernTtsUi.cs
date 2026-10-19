@@ -25,7 +25,25 @@ public partial class Form1
     private readonly Color uiPrimary = Color.FromArgb(27, 118, 91);
     private readonly Color uiBackground = Color.FromArgb(245, 247, 250);
     private readonly Color uiText = Color.FromArgb(37, 49, 65);
+    // Three top-level workflows; existing TabPages keep their original indexes
+    // so the TTS/Voice Library event handlers continue to work unchanged.
     private readonly Dictionary<TabPage, Button> navigationButtons = new();
+    private readonly Dictionary<int, Button> groupNavigationButtons = new();
+    private readonly Dictionary<int, int> lastVisitedByGroup = new();
+    private readonly int[] pageGroups = { 0, 1, 2, 1, 0, 0, 2 };
+    private readonly string[] pageTitles = {
+        "TTS / Hàng loạt", "Thư viện giọng", "Cài đặt",
+        "Clone giọng", "Dự án & Xuất", "SRT & Căn chỉnh", "Backend & Hiệu năng"
+    };
+    private readonly string[] pageDescriptions = {
+        "Tạo audio hàng loạt và quản lý tiến trình xử lý.",
+        "Tìm, nghe thử và quản lý các giọng đã lưu.",
+        "Thiết lập mặc định cho ứng dụng.",
+        "So sánh giọng gốc và giọng clone, lưu preset riêng.",
+        "Lưu dự án, khôi phục danh sách và xuất dữ liệu.",
+        "Kiểm tra phụ đề và căn chỉnh theo audio.",
+        "Theo dõi engine, tài nguyên máy và tối ưu hiệu năng."
+    };
     private Label? pageHeading;
     private Label? pageSubtitle;
 
@@ -54,12 +72,13 @@ public partial class Form1
 
         var shell = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2,
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3,
             BackColor = uiBackground, Margin = Padding.Empty, Padding = Padding.Empty
         };
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 218));
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var nav = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Padding = new Padding(12, 9, 12, 12) };
         var brand = new Label
@@ -75,27 +94,64 @@ public partial class Form1
         };
         nav.Controls.Add(menu);
         nav.Controls.Add(brand);
-        var names = new[] { "TTS / Hàng loạt", "Thư viện giọng", "Cài đặt",
-            "Clone giọng V2", "Dự án & Xuất", "SRT nâng cao", "Hệ thống V3" };
-        var symbols = new[] { "◉", "♫", "⚙", "◈", "▣", "▤", "⚙" };
-        for (int i = 0; i < pages.Count; i++)
+        var groups = new[] {
+            (Title: "Tạo audio", Icon: "▶", DefaultPage: 0),
+            (Title: "Giọng đọc", Icon: "♫", DefaultPage: 1),
+            (Title: "Quản lý", Icon: "⚙", DefaultPage: 2)
+        };
+        for (int groupIndex = 0; groupIndex < groups.Length; groupIndex++)
         {
-            var page = pages[i];
-            int index = i;
+            int group = groupIndex;
+            var entry = groups[group];
             var button = new Button
             {
-                Text = (i < symbols.Length ? symbols[i] : "•") + "   " +
-                       (i < names.Length ? names[i] : page.Text),
-                Width = 186, Height = 48, Margin = new Padding(2, 3, 2, 3),
+                Name = "btnNavGroup" + group,
+                Tag = "nav-group:" + group,
+                Text = entry.Icon + "    " + entry.Title,
+                Width = 186, Height = 49, Margin = new Padding(2, 4, 2, 4),
                 FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = new Font("Segoe UI", 10, FontStyle.Regular),
-                Padding = new Padding(12, 0, 0, 0)
+                Padding = new Padding(14, 0, 0, 0)
+            };
+            button.FlatAppearance.BorderSize = 0;
+            button.Click += (_, _) => mainTabControl.SelectedIndex =
+                lastVisitedByGroup.TryGetValue(group, out int visited)
+                    ? visited : entry.DefaultPage;
+            groupNavigationButtons[group] = button;
+            menu.Controls.Add(button);
+        }
+
+        // Compact contextual second level: only the active workflow's tools
+        // are visible. We deliberately keep the existing seven TabPages.
+        var subnav = new FlowLayoutPanel
+        {
+            Name = "ttsSubNavigation",
+            Dock = DockStyle.Fill, AutoScroll = true,
+            WrapContents = false, FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.White, Margin = Padding.Empty,
+            Padding = new Padding(19, 4, 14, 3)
+        };
+        for (int i = 0; i < pages.Count; i++)
+        {
+            int index = i;
+            var page = pages[i];
+            var button = new Button
+            {
+                Name = "btnNavPage" + index,
+                Tag = "nav-page:" + index,
+                Text = pageTitles[index],
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new Size(95, 33), Height = 33,
+                Margin = new Padding(4, 0, 7, 0),
+                FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand,
+                Font = new Font("Segoe UI", 9, FontStyle.Regular),
+                Padding = new Padding(13, 2, 13, 2)
             };
             button.FlatAppearance.BorderSize = 0;
             button.Click += (_, _) => mainTabControl.SelectedIndex = index;
             navigationButtons[page] = button;
-            menu.Controls.Add(button);
+            subnav.Controls.Add(button);
         }
         var header = new TableLayoutPanel
         {
@@ -113,7 +169,7 @@ public partial class Form1
         {
             Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(115, 125, 139),
-            Text = "Tạo giọng đọc AI, clone giọng và xuất âm thanh / SRT"
+            Text = "Các công cụ được sắp xếp theo luồng sử dụng."
         };
         header.Controls.Add(pageHeading, 0, 0);
         header.Controls.Add(pageSubtitle, 0, 1);
@@ -149,12 +205,13 @@ public partial class Form1
         header.Controls.Add(reconnect, 1, 0);
         header.SetRowSpan(reconnect, 2);
         shell.Controls.Add(nav, 0, 0);
-        shell.SetRowSpan(nav, 2);
+        shell.SetRowSpan(nav, 3);
         shell.Controls.Add(header, 1, 0);
+        shell.Controls.Add(subnav, 1, 1);
         var workspace = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 10, 10, 10), BackColor = uiBackground };
         mainTabControl.Dock = DockStyle.Fill;
         workspace.Controls.Add(mainTabControl);
-        shell.Controls.Add(workspace, 1, 1);
+        shell.Controls.Add(workspace, 1, 2);
         Controls.Add(shell);
         ApplyModernControlStyles(mainTabControl);
         ApplyLegacyWorkspaceStyles();
@@ -505,16 +562,30 @@ public partial class Form1
 
     private void RefreshModernNavigation()
     {
+        int index = mainTabControl.SelectedIndex;
+        if (index < 0 || index >= pageGroups.Length) return;
+
+        int activeGroup = pageGroups[index];
+        lastVisitedByGroup[activeGroup] = index;
+        foreach (var (group, button) in groupNavigationButtons)
+        {
+            bool active = group == activeGroup;
+            button.BackColor = active ? Color.FromArgb(224, 244, 237) : Color.White;
+            button.ForeColor = active ? uiPrimary : uiText;
+            button.Font = new Font("Segoe UI", 10, active ? FontStyle.Bold : FontStyle.Regular);
+        }
         foreach (var (page, button) in navigationButtons)
         {
-            bool selected = mainTabControl.SelectedTab == page;
-            button.BackColor = selected ? Color.FromArgb(224, 244, 237) : Color.White;
-            button.ForeColor = selected ? uiPrimary : uiText;
-            button.Font = new Font("Segoe UI", 10,
-                selected ? FontStyle.Bold : FontStyle.Regular);
+            int pageIndex = mainTabControl.TabPages.IndexOf(page);
+            bool visible = pageIndex >= 0 && pageGroups[pageIndex] == activeGroup;
+            button.Visible = visible;
+            bool active = visible && pageIndex == index;
+            button.BackColor = active ? Color.FromArgb(224, 244, 237) : Color.White;
+            button.ForeColor = active ? uiPrimary : Color.FromArgb(74, 87, 105);
+            button.Font = new Font("Segoe UI", 9, active ? FontStyle.Bold : FontStyle.Regular);
         }
-        if (pageHeading != null)
-            pageHeading.Text = navigationButtons.TryGetValue(mainTabControl.SelectedTab!, out var selectedButton)
-                ? selectedButton.Text[4..].Trim() : "DvaForDev Studio";
+
+        if (pageHeading != null) pageHeading.Text = pageTitles[index];
+        if (pageSubtitle != null) pageSubtitle.Text = pageDescriptions[index];
     }
 }

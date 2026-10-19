@@ -92,7 +92,37 @@ class V4Smoke
             form.Load -= handler;
             form.Show();
             Application.DoEvents();
-            foreach(var (index,key) in new[]{(1,"voice"),(3,"clone"),(4,"project"),
+
+            // Three primary sections remain visible. Each shows only its
+            // contextual subtabs; changing sections must preserve TabPage indexes.
+            var expectedGroups = new[] {
+                new[]{0,4,5}, new[]{1,3}, new[]{2,6}
+            };
+            for(int g=0;g<3;g++)
+            {
+                var mainNav=form.Controls.Find("btnNavGroup"+g,true).OfType<Button>().Single();
+                if(!mainNav.Visible)throw new Exception("Missing main navigation group "+g);
+                mainNav.PerformClick();
+                Application.DoEvents();
+                if(tab.SelectedIndex!=new[]{0,1,2}[g])
+                    throw new Exception("Wrong default landing page for section "+g);
+                var actual=Enumerable.Range(0,7).Where(i=>
+                    form.Controls.Find("btnNavPage"+i,true).OfType<Button>().Single().Visible).ToArray();
+                if(!actual.SequenceEqual(expectedGroups[g]))
+                    throw new Exception("Incorrect contextual navigation for group "+g+
+                        ": "+string.Join(",",actual));
+            }
+            tab.SelectedIndex=4;
+            Application.DoEvents();
+            form.Controls.Find("btnNavGroup1",true).OfType<Button>().Single().PerformClick();
+            form.Controls.Find("btnNavGroup0",true).OfType<Button>().Single().PerformClick();
+            if(tab.SelectedIndex!=4)
+                throw new Exception("Switching group lost the last selected project subtab");
+            form.Controls.Find("btnNavPage5",true).OfType<Button>().Single().PerformClick();
+            if(tab.SelectedIndex!=5)throw new Exception("Contextual SRT subtab does not navigate");
+            Console.WriteLine("PASS: 3 grouped menus, contextual subtabs and last-visited navigation");
+
+            foreach(var (index,key) in new[]{(0,"tts"),(1,"voice"),(3,"clone"),(4,"project"),
                                          (5,"srt"),(6,"backend")})
             {
                 tab.SelectedIndex=index;
@@ -101,8 +131,30 @@ class V4Smoke
                 form.DrawToBitmap(bitmap,new Rectangle(0,0,bitmap.Width,bitmap.Height));
                 bitmap.Save(Path.Combine(root,key+"_v4.png"));
             }
+            // Verify contextual navigation at the smallest supported shell size.
+            form.Size=new Size(1050,700);
+            foreach(int index in new[]{0,1,2,3,4,5,6})
+            {
+                tab.SelectedIndex=index;
+                Application.DoEvents();
+                var row=form.Controls.Find("ttsSubNavigation",true)
+                    .OfType<FlowLayoutPanel>().Single();
+                var chosen=form.Controls.Find("btnNavPage"+index,true)
+                    .OfType<Button>().Single();
+                if(!row.Visible || !chosen.Visible || chosen.Width<=60 ||
+                   row.Width<500 || !chosen.Enabled)
+                    throw new Exception("Small-window submenu clipped/inaccessible for tab "+index);
+            }
+            tab.SelectedIndex=0;
+            Application.DoEvents();
+            using(var small=new Bitmap(form.Width,form.Height))
+            {
+                form.DrawToBitmap(small,new Rectangle(0,0,small.Width,small.Height));
+                small.Save(Path.Combine(root,"tts_compact.png"));
+            }
             form.Hide();
-            Console.WriteLine("PASS: rendered 4 WinForms V4 screens with backend startup disabled");
+            Console.WriteLine("PASS: compact 1050x700 layout, 7 navigation targets");
+            Console.WriteLine("PASS: rendered 6 WinForms screens with backend startup disabled");
         }
         finally
         {
