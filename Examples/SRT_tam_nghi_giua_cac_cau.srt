@@ -1,0 +1,15 @@
+1
+00:00:01,000 --> 00:00:06,000
+Xin chào, đây là câu đọc đầu tiên.
+
+2
+00:00:09,000 --> 00:00:14,000
+Sau khoảng nghỉ, chúng ta bắt đầu câu thứ hai.
+
+3
+00:00:18,000 --> 00:00:24,000
+Hãy chú ý khoảng im lặng ở giữa các câu.
+
+4
+00:00:28,000 --> 00:00:35,000
+Đây là câu cuối của bài thử nghiệm thời gian SRT.

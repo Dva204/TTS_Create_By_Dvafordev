@@ -8,7 +8,8 @@ namespace TTS_Create_By_DvaForDev.Services;
 public sealed record StudioSegment(
     string Id, string Text, string VoiceId, string Language,
     string Engine, string Status, string? AudioFile, string? Source,
-    double DurationSeconds);
+    double DurationSeconds, long? SrtStartMilliseconds = null,
+    long? SrtEndMilliseconds = null);
 
 public sealed record StudioProject(
     int SchemaVersion, string Name, DateTimeOffset UpdatedAt,

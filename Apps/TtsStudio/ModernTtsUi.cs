@@ -30,16 +30,15 @@ public partial class Form1
     private readonly Dictionary<TabPage, Button> navigationButtons = new();
     private readonly Dictionary<int, Button> groupNavigationButtons = new();
     private readonly Dictionary<int, int> lastVisitedByGroup = new();
-    private readonly int[] pageGroups = { 0, 1, 2, 1, 0, 0, 2 };
+    private readonly int[] pageGroups = { 0, 1, 2, 0, 0, 2 };
     private readonly string[] pageTitles = {
         "TTS / Hàng loạt", "Thư viện giọng", "Cài đặt",
-        "Clone giọng", "Dự án & Xuất", "SRT & Căn chỉnh", "Backend & Hiệu năng"
+        "Dự án & Xuất", "SRT & Căn chỉnh", "Backend & Hiệu năng"
     };
     private readonly string[] pageDescriptions = {
-        "Tạo audio hàng loạt và quản lý tiến trình xử lý.",
+        "Tạo audio từ văn bản hoặc SRT, giữ nguyên thời gian ngắt nghỉ.",
         "Tìm, nghe thử và quản lý các giọng đã lưu.",
         "Thiết lập mặc định cho ứng dụng.",
-        "So sánh giọng gốc và giọng clone, lưu preset riêng.",
         "Lưu dự án, khôi phục danh sách và xuất dữ liệu.",
         "Kiểm tra phụ đề và căn chỉnh theo audio.",
         "Theo dõi engine, tài nguyên máy và tối ưu hiệu năng."
@@ -123,7 +122,7 @@ public partial class Form1
         }
 
         // Compact contextual second level: only the active workflow's tools
-        // are visible. We deliberately keep the existing seven TabPages.
+        // are visible. We deliberately keep the existing six TabPages.
         var subnav = new FlowLayoutPanel
         {
             Name = "ttsSubNavigation",

@@ -64,15 +64,12 @@ public partial class Form1
 
     private void InitializeUpgradeTabs()
     {
-        var cloneTab = new TabPage("Clone giọng V2");
         var projectTab = new TabPage("Dự án & Xuất");
         var srtTab = new TabPage("SRT nâng cao");
         var backendTab = new TabPage("Hệ thống V3");
-        mainTabControl.TabPages.Add(cloneTab);
         mainTabControl.TabPages.Add(projectTab);
         mainTabControl.TabPages.Add(srtTab);
         mainTabControl.TabPages.Add(backendTab);
-        BuildCloneTab(cloneTab);
         BuildVoiceLibraryV3Toolbar();
         BuildProjectTab(projectTab);
         BuildSrtTab(srtTab);
@@ -91,6 +88,7 @@ public partial class Form1
             _ = RefreshVoices((Controls.Find("txtLibrarySearch",true)
                 .OfType<TextBox>().FirstOrDefault()?.Text),lifetime.Token);
         bar.Controls.Add(_favoritesOnly);
+        bar.Controls.Add(ActionButton("Yêu thích / Bỏ thích", ToggleSelectedVoiceFavorite, 170));
         bar.Controls.Add(ActionButton("Sao lưu thư viện giọng",()=>_ = BackupVoiceLibraryAsync(),185));
         var parent=table.Parent;
         parent.Controls.Remove(table);
@@ -105,6 +103,17 @@ public partial class Form1
         host.Controls.Add(bar,0,0);
         host.Controls.Add(table,0,1);
         parent.Controls.Add(host);
+    }
+
+    private void ToggleSelectedVoiceFavorite()
+    {
+        var voice=CurrentLibraryVoice();
+        if (voice is null){MessageBox.Show(this,"Hãy chọn một giọng trước.");return;}
+        var value=_voiceWorkspace.Get(voice.Id);
+        _voiceWorkspace.Set(voice.Id,value with {Favorite=!value.Favorite});
+        WriteLog($"{voice.Name}: "+(!value.Favorite?"Đã yêu thích":"Đã bỏ yêu thích"));
+        if(_favoritesOnly?.Checked==true)
+            _ = RefreshVoices(null,lifetime.Token);
     }
 
     private async Task BackupVoiceLibraryAsync()
@@ -211,7 +220,8 @@ public partial class Form1
         var voice=CurrentLibraryVoice();
         if(voice is null)return;
         var data=_voiceWorkspace.Get(voice.Id);
-        _favoriteVoice.Checked=data.Favorite;_voiceTags.Text=data.Tags;
+        if (_favoriteVoice is not null) _favoriteVoice.Checked=data.Favorite;
+        if (_voiceTags is not null) _voiceTags.Text=data.Tags;
     }
 
     private static void PlayAudio(string path)
@@ -306,7 +316,9 @@ public partial class Form1
                 System.Globalization.CultureInfo.InvariantCulture,out double duration);
             return new StudioSegment(Cell(0),Cell(3),voiceComboBox.SelectedValue?.ToString()??"",
                 Cell(5),engineComboBox.Text,Cell(6),
-                string.IsNullOrWhiteSpace(Cell(1))?null:Cell(1),Cell(7),duration);
+                string.IsNullOrWhiteSpace(Cell(1))?null:Cell(1),Cell(7),duration,
+                row.Tag is SubtitleCue cue ? (long)cue.Start.TotalMilliseconds : null,
+                row.Tag is SubtitleCue cueEnd ? (long)cueEnd.End.TotalMilliseconds : null);
         }).ToArray();
         return new StudioProject(1,_projectName.Text.Trim(),
             DateTimeOffset.UtcNow,voiceComboBox.SelectedValue?.ToString()??"",
@@ -357,10 +369,20 @@ public partial class Form1
                 "Mở dự án",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
             dgv.Rows.Clear();
             foreach(var seg in model.Segments)
-                dgv.Rows.Add(seg.Id,seg.AudioFile??"",
+            {
+                int idx=dgv.Rows.Add(seg.Id,seg.AudioFile??"",
                     seg.DurationSeconds>0?seg.DurationSeconds.ToString(
                         System.Globalization.CultureInfo.InvariantCulture):"",
                     seg.Text,seg.VoiceId,seg.Language,seg.Status,seg.Source??"");
+                if(seg.SrtStartMilliseconds.HasValue && seg.SrtEndMilliseconds.HasValue)
+                {
+                    var start=TimeSpan.FromMilliseconds(seg.SrtStartMilliseconds.Value);
+                    var end=TimeSpan.FromMilliseconds(seg.SrtEndMilliseconds.Value);
+                    dgv.Rows[idx].Tag=new SubtitleCue(idx+1,start,end,seg.Text);
+                    dgv.Rows[idx].Cells["SrtStart"].Value=start.ToString(@"hh\:mm\:ss\,fff");
+                    dgv.Rows[idx].Cells["SrtEnd"].Value=end.ToString(@"hh\:mm\:ss\,fff");
+                }
+            }
             var folder=Controls.Find("txtBatchFolder",true).OfType<TextBox>().FirstOrDefault();
             if(folder is not null) folder.Text=model.OutputFolder;
             var selected=allVoices.FirstOrDefault(v=>v.Id==model.VoiceId);

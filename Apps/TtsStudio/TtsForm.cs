@@ -37,9 +37,11 @@ public partial class Form1 : Form
         if (Controls.Find("btnBrowseOutputFolder", true).FirstOrDefault() is Button btnOutFolder) btnOutFolder.Click += BtnBrowseOutputFolder_Click;
         if (Controls.Find("btnBrowseFolder", true).FirstOrDefault() is Button btnBrowseFold) btnBrowseFold.Click += BtnBrowseOutputFolder_Click;
         if (Controls.Find("btnImportFile", true).FirstOrDefault() is Button btnImport) btnImport.Click += BtnImportFile_Click;
+        InitializeSubtitleBatchImport();
         if (Controls.Find("btnImportFolder", true).FirstOrDefault() is Button btnImpFolder) btnImpFolder.Click += BtnImportFolder_Click;
         if (Controls.Find("btnClearList", true).FirstOrDefault() is Button btnClr) btnClr.Click += (s, e) => {
             if (Controls.Find("dgvJobs", true).FirstOrDefault() is DataGridView dgv) dgv.Rows.Clear();
+            if (_importedSrtInfo != null) _importedSrtInfo.Text = "TXT / SRT";
         };
         if (Controls.Find("btnImportVoice", true).FirstOrDefault() is Button btnImpVoice) btnImpVoice.Click += AddVoiceButton_Click;
         if (Controls.Find("btnOpenAudioOutput", true).FirstOrDefault() is Button btnOpenOut) btnOpenOut.Click += BtnOpenAudioOutput_Click;
@@ -861,67 +863,59 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
     private void BtnImportFile_Click(object? sender, EventArgs e)
     {
-        using var dialog = new OpenFileDialog { Filter = "Text/Subtitle (*.txt;*.srt)|*.txt;*.srt" };
+        using var dialog = new OpenFileDialog { Filter = "Văn bản TXT (*.txt)|*.txt", Title = "Nhập văn bản TTS" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        try { ImportBatchText(dialog.FileName); }
+        catch(Exception ex){ShowError(ex);}
+    }
 
-        var dgv = Controls.Find("dgvJobs", true).FirstOrDefault() as DataGridView;
-        if (dgv == null) return;
-
-        var lines = File.ReadAllLines(dialog.FileName);
+    private void ImportBatchText(string source)
+    {
+        var dgv = Controls.Find("dgvJobs", true).OfType<DataGridView>().First();
+        bool autoSplit = (Controls.Find("chkAutoSplit", true).FirstOrDefault() as CheckBox)?.Checked == true;
+        string splitChars = (Controls.Find("txtSplitChars", true).FirstOrDefault() as TextBox)?.Text ?? ".!?\n";
+        var text = File.ReadAllText(source);
+        var segments = autoSplit && !string.IsNullOrEmpty(splitChars)
+            ? SmartSplit(text, splitChars, userSettings.MaxChars)
+            : text.Split(new[] { "\r\n", "\n" },StringSplitOptions.RemoveEmptyEntries)
+                  .Select(x=>x.Trim()).Where(x=>x.Length>0).ToList();
         dgv.Rows.Clear();
-        int id = 1;
-        var ext = Path.GetExtension(dialog.FileName).ToLower();
+        int id=1;
+        foreach(var line in segments)
+            dgv.Rows.Add((id++).ToString("D3"),"","",line,
+                voiceComboBox.Text,languageComboBox.Text,"Pending","");
+        if(_importedSrtInfo != null) _importedSrtInfo.Text=$"TXT: {id-1} câu";
+        WriteLog($"Đã nhập {id-1} câu TXT: {Path.GetFileName(source)}");
+    }
 
-        if (ext == ".srt")
+    private void ImportTimedSrt(string source)
+    {
+        var cues=SrtQualityService.Read(File.ReadAllText(source));
+        if(cues.Count == 0)throw new InvalidDataException("SRT không có câu hợp lệ.");
+        for(int i=0;i<cues.Count;i++)
         {
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (int.TryParse(lines[i].Trim(), out _))
-                {
-                    string timing = i + 1 < lines.Length ? lines[i + 1] : "";
-                    string content = "";
-                    i += 2;
-                    while (i < lines.Length && !string.IsNullOrWhiteSpace(lines[i]))
-                    {
-                        content += lines[i] + " ";
-                        i++;
-                    }
-                    if (!string.IsNullOrWhiteSpace(content))
-                    {
-                        dgv.Rows.Add(id.ToString("D3"), "", timing, content.Trim(), voiceComboBox.Text, languageComboBox.Text, "Pending");
-                        id++;
-                    }
-                }
-            }
+            if(cues[i].Start<TimeSpan.Zero || (i>0 && cues[i].Start<cues[i-1].End))
+                throw new InvalidDataException($"SRT tại câu {i+1} bị trùng/lùi thời gian.");
         }
-        else
+        var dgv = Controls.Find("dgvJobs", true).OfType<DataGridView>().First();
+        dgv.Rows.Clear();
+        string sourceName=Path.GetFileNameWithoutExtension(source);
+        for(int i=0;i<cues.Count;i++)
         {
-            bool autoSplit = (Controls.Find("chkAutoSplit", true).FirstOrDefault() as CheckBox)?.Checked == true;
-            string splitChars = (Controls.Find("txtSplitChars", true).FirstOrDefault() as TextBox)?.Text ?? ".!?\n";
-
-            string fullText = File.ReadAllText(dialog.FileName);
-            if (autoSplit && !string.IsNullOrEmpty(splitChars))
-            {
-                // Use SmartSplit to ensure sentences aren't too short
-                var segments = SmartSplit(fullText, splitChars, userSettings.MaxChars);
-                foreach (var seg in segments)
-                {
-                    dgv.Rows.Add(id.ToString("D3"), "", "", seg, voiceComboBox.Text, languageComboBox.Text, "Pending");
-                    id++;
-                }
-            }
-            else
-            {
-                foreach (var line in lines)
-                {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-                    dgv.Rows.Add(id.ToString("D3"), "", "", line.Trim(), voiceComboBox.Text, languageComboBox.Text, "Pending");
-                    id++;
-                }
-            }
+            var cue=cues[i];
+            int id=dgv.Rows.Add((i+1).ToString("D3"),"","",cue.Text,
+                voiceComboBox.Text,languageComboBox.Text,"Pending",sourceName);
+            var row=dgv.Rows[id];
+            row.Tag=cue;
+            row.Cells["SrtStart"].Value=cue.Start.ToString(@"hh\:mm\:ss\,fff");
+            row.Cells["SrtEnd"].Value=cue.End.ToString(@"hh\:mm\:ss\,fff");
         }
-
-        WriteLog($"Imported {id - 1} segments from {Path.GetFileName(dialog.FileName)}");
+        double gaps=cues[0].Start.TotalSeconds;
+        for(int i=1;i<cues.Count;i++)
+            gaps+=(cues[i].Start-cues[i-1].End).TotalSeconds;
+        if(_importedSrtInfo != null)
+            _importedSrtInfo.Text=$"SRT: {cues.Count} câu | Nghỉ {gaps:F1}s";
+        WriteLog($"Đã nhập SRT: {cues.Count} câu, {gaps:F2}s nghỉ. Mốc thời gian giữ nguyên.");
     }
 
     private async void BtnRunBatch_Click(object? sender, EventArgs e)
@@ -1189,6 +1183,13 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         SetBusy(true);
         try
         {
+            // SRT-imported rows carry original cue times in their Tag.
+            // Do not use the ordinary seamless MP3 concatenation for them.
+            if(dgv.Rows.Cast<DataGridViewRow>().Any(row=>row.Tag is SubtitleCue))
+            {
+                await JoinTimedSrtAudioAsync(txtFolder.Text,dgv,lifetime.Token);
+                return;
+            }
             var groups = new Dictionary<string, List<string>>();
             string ext = userSettings.OutputFormat.ToLower() == "mp3" ? "mp3" : "wav";
 
@@ -1433,6 +1434,43 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         {
             var sourceName = group.Key;
             string srtPath = Path.Combine(txtFolder.Text, $"{sourceName}_subtitles.srt");
+            var timedRows=group.Value.Where(x=>x.Tag is SubtitleCue).ToArray();
+            if(timedRows.Length>0)
+            {
+                if(timedRows.Length!=group.Value.Count)
+                {
+                    WriteLog("Không thể trộn SRT có timeline và TXT trong cùng một nhóm.");
+                    continue;
+                }
+                // Emit precisely the original cue times (including gaps) ONLY
+                // when all cues completed and audio is present.
+                var expected = dgv.Rows.Cast<DataGridViewRow>()
+                    .Where(x=>(x.Cells[7].Value?.ToString()??"")==
+                        (sourceName.StartsWith("000_")?sourceName[4..]:sourceName))
+                    .ToList();
+                if(expected.Count!=group.Value.Count)
+                {
+                    WriteLog($"SRT {sourceName}: còn cue thiếu audio, chưa xuất file đồng bộ.");
+                    continue;
+                }
+                var timed=timedRows
+                    .Select(row=>(Row:row,Cue:(SubtitleCue)row.Tag!))
+                    .OrderBy(x=>x.Cue.Start)
+                    .Select(x=>new TimedAudioCue(x.Cue.Number,x.Cue.Start,x.Cue.End,x.Cue.Text,
+                        Path.Combine(txtFolder.Text,x.Row.Cells[1].Value?.ToString()??"")))
+                    .ToArray();
+                try
+                {
+                    SrtBatchTimelineService.Validate(timed);
+                    if(File.Exists(srtPath))
+                        throw new IOException("SRT đầu ra đã tồn tại: "+srtPath);
+                    await File.WriteAllTextAsync(srtPath,
+                        SrtBatchTimelineService.BuildOriginalSrt(timed),lifetime.Token);
+                    WriteLog($"Đã tạo phụ đề giữ nguyên khoảng nghỉ: {srtPath}");
+                }
+                catch(Exception ex){WriteLog("Không xuất SRT: "+ex.Message);}
+                continue;
+            }
             var sb = new System.Text.StringBuilder();
             TimeSpan current = TimeSpan.Zero;
             int index = 1;
