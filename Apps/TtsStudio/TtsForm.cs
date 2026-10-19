@@ -235,6 +235,7 @@ public partial class Form1 : Form
                 languageComboBox.SelectedItem = "Tiếng Việt (vi)";
                 numSimilarity.Value = 65; // Tested VieNeu C profile; adjustable in UI.
             }
+            UpdateEngineSettingsUI();
         };
 
         if (Controls.Find("cmbNewVoiceLanguage", true).FirstOrDefault() is ComboBox cmbNewLang)
@@ -257,6 +258,7 @@ public partial class Form1 : Form
 
         LoadSettings();
 
+        UpdateEngineSettingsUI();
         try
         {
             await backend.StartAsync(settings.PythonExecutable, lifetime.Token);
@@ -556,6 +558,29 @@ public partial class Form1 : Form
             engineComboBox.SelectedItem = engine;
         languageComboBox.SelectedItem = selectedLanguage;
     }
+    private readonly ToolTip engineSettingsTips = new() { AutoPopDelay = 12000 };
+
+    private void UpdateEngineSettingsUI()
+    {
+        // VieNeu inference accepts temperature; playback speed is FFmpeg.
+        // Its worker does not support CFG, exaggeration, denoise or speaker boost.
+        bool isVieNeu = string.Equals(engineComboBox.SelectedItem?.ToString(),
+            "vieneu_v3_turbo", StringComparison.OrdinalIgnoreCase);
+        foreach (Control control in new Control[] {
+            lblStability, numStability, lblStyle, numStyle,
+            lblDenoise, numDenoise, chkSpeakerBoost })
+        {
+            control.Enabled = !isVieNeu;
+            engineSettingsTips.SetToolTip(control, isVieNeu
+                ? "Chỉ hỗ trợ Chatterbox, không áp dụng cho VieNeu." : "");
+        }
+        engineSettingsTips.SetToolTip(numSimilarity, isVieNeu
+            ? "Temperature gửi trực tiếp cho VieNeu. Giữ nguyên 65 nếu muốn dùng cấu hình đã thử."
+            : "Temperature gửi cho Chatterbox.");
+        engineSettingsTips.SetToolTip(numSpeed,
+            "Speed được FFmpeg áp dụng sau khi tạo giọng.");
+    }
+
     private string GetLangCode(string display)
     {
         if (string.IsNullOrWhiteSpace(display) || display == "Auto") return "";
@@ -903,7 +928,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
         try
         {
-            var settingsReq = new TtsGenerationSettings(
+            TtsGenerationSettings? settingsReq = new TtsGenerationSettings(
                 Speed: (double)numSpeed.Value,
                 CfgWeight: (double)numStability.Value / 100.0,
                 Temperature: (double)numSimilarity.Value / 100.0,
@@ -912,6 +937,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 Seed: null,
                 Denoise: (double)numDenoise.Value / 100.0
             );
+            if ((Controls.Find("chkChangeVoiceSettings", true).FirstOrDefault() as CheckBox)?.Checked == false)
+                settingsReq = null;
             string lang = GetLangCode(languageComboBox.Text);
             string engineTxt = engineComboBox.Text;
             bool retryFailed = (Controls.Find("chkRetryFailed", true).FirstOrDefault() as CheckBox)?.Checked == true;
@@ -954,12 +981,16 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 if (skipExisting && File.Exists(path))
                 {
                     double dur = await GetAudioDurationSecs(path);
-                    row.Cells[1].Value = filename;
-                    row.Cells[2].Value = dur.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    row.Cells[6].Value = "Completed";
-                    WriteLog($"Segment {row.Cells[0].Value} skipped (already exists).");
-                    Interlocked.Increment(ref done);
-                    continue;
+                    if (dur > 0.05)
+                    {
+                        row.Cells[1].Value = filename;
+                        row.Cells[2].Value = dur.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        row.Cells[6].Value = "Completed";
+                        WriteLog($"Segment {row.Cells[0].Value} skipped (valid audio exists).");
+                        Interlocked.Increment(ref done);
+                        continue;
+                    }
+                    WriteLog($"Segment {row.Cells[0].Value}: existing audio is invalid; generating again.");
                 }
 
                 var content = row.Cells[3].Value?.ToString() ?? "";
@@ -1004,41 +1035,51 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                             if (job.Status == "cancelled") throw new OperationCanceledException();
                             if (job.Status == "completed")
                             {
-                                var audioBytes = await new HttpClient().GetByteArrayAsync(new Uri(settings.BackendUri, $"api/jobs/{jobId}/audio"), token);
-                                if (ext == "mp3")
+                                var audioBytes = await api.DownloadAudioAsync(jobId, token);
+                                // Write and verify an output temp file first; never mark a
+                                // truncated MP3/WAV as Completed and never leave one as
+                                // a candidate for "Skip Existing" on the next run.
+                                var tempWav = path + ".tmp.wav";
+                                var tempOutput = path + (ext == "mp3" ? ".tmp.mp3" : ".tmp.wav");
+                                try
                                 {
-                                    var tempWav = path + ".tmp.wav";
-                                    await File.WriteAllBytesAsync(tempWav, audioBytes, token);
-                                    var psi = new ProcessStartInfo("ffmpeg")
+                                    if (ext == "mp3")
                                     {
-                                        Arguments = $"-y -i \"{tempWav}\" -b:a {cleanBitrate} \"{path}\"",
-                                        UseShellExecute = false,
-                                        CreateNoWindow = true,
-                                        RedirectStandardError = true
-                                    };
-                                    var proc = Process.Start(psi);
-                                    if (proc != null)
-                                    {
-                                        var err = await proc.StandardError.ReadToEndAsync();
-                                        await proc.WaitForExitAsync(token);
-                                        if (proc.ExitCode != 0 || !File.Exists(path))
+                                        await File.WriteAllBytesAsync(tempWav, audioBytes, token);
+                                        var psi = new ProcessStartInfo("ffmpeg")
                                         {
-                                            throw new InvalidOperationException($"FFmpeg conversion failed (exit code {proc.ExitCode}): {err}");
-                                        }
+                                            Arguments = $"-y -i \"{tempWav}\" -b:a {cleanBitrate} \"{tempOutput}\"",
+                                            UseShellExecute = false,
+                                            CreateNoWindow = true,
+                                            RedirectStandardError = true
+                                        };
+                                        using var proc = Process.Start(psi)
+                                            ?? throw new InvalidOperationException("Cannot start FFmpeg.");
+                                        var err = await proc.StandardError.ReadToEndAsync(token);
+                                        await proc.WaitForExitAsync(token);
+                                        if (proc.ExitCode != 0 || !File.Exists(tempOutput))
+                                            throw new InvalidOperationException($"FFmpeg conversion failed: {err}");
                                     }
-                                    try { File.Delete(tempWav); } catch { }
+                                    else
+                                    {
+                                        await File.WriteAllBytesAsync(tempOutput, audioBytes, token);
+                                    }
+                                    double dur = await GetAudioDurationSecs(tempOutput);
+                                    if (dur <= 0.05)
+                                        throw new InvalidDataException("Audio generated was empty or invalid.");
+                                    File.Move(tempOutput, path, overwrite: true);
+                                    try { await api.CancelJobAsync(jobId, lifetime.Token); } catch { }
+                                    Invoke(() => {
+                                        row.Cells[1].Value = filename;
+                                        row.Cells[2].Value = dur.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                                        row.Cells[6].Value = "Completed";
+                                    });
                                 }
-                                else
+                                finally
                                 {
-                                    await File.WriteAllBytesAsync(path, audioBytes, token);
+                                    try { File.Delete(tempWav); } catch { }
+                                    try { File.Delete(tempOutput); } catch { }
                                 }
-                                try { await api.CancelJobAsync(jobId, token); } catch { }
-                                double dur = await GetAudioDurationSecs(path);
-                                Invoke(() => {
-                                    row.Cells[1].Value = filename;
-                                    row.Cells[2].Value = dur.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                                    row.Cells[6].Value = "Completed";
-                                });
                                 WriteLog($"Segment {cell0} completed.");
                                 Interlocked.Increment(ref done);
                                 break;
@@ -1075,7 +1116,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         }
         catch (OperationCanceledException)
         {
-            WriteLog("Batch cancelled.");
+            WriteLog("Batch cancelled. A running AI inference may still need time to finish safely; do not force-close Python.");
         }
         catch (Exception ex)
         {
@@ -1259,30 +1300,73 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
 
     private async Task<double> GetAudioDurationSecs(string path)
     {
-        double durationSecs = 0;
-        try {
-            var psi = new ProcessStartInfo("ffprobe") {
+        if (!File.Exists(path) || new FileInfo(path).Length < 64) return 0;
+        // An MP3 file cannot be validated by treating its byte length as PCM.
+        // ffprobe is authoritative when available.
+        try
+        {
+            var psi = new ProcessStartInfo("ffprobe")
+            {
                 Arguments = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{path}\"",
-                RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false, CreateNoWindow = true
             };
-            var proc = Process.Start(psi);
-            if (proc != null) {
-                var outStr = await proc.StandardOutput.ReadToEndAsync();
-                await proc.WaitForExitAsync();
-                if (double.TryParse(outStr.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double d)) {
-                    durationSecs = d;
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                var outputTask = proc.StandardOutput.ReadToEndAsync();
+                var errorTask = proc.StandardError.ReadToEndAsync();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                try { await proc.WaitForExitAsync(timeout.Token); }
+                catch (OperationCanceledException)
+                {
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    return 0;
                 }
+                var text = await outputTask;
+                await errorTask;
+                if (proc.ExitCode == 0 &&
+                    double.TryParse(text.Trim(), System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double seconds) &&
+                    double.IsFinite(seconds) && seconds > 0.05)
+                    return seconds;
             }
-        } catch { }
-
-        if (durationSecs <= 0) {
-            try {
-                var fi = new FileInfo(path);
-                durationSecs = (fi.Length - 44) / 48000.0;
-                if (durationSecs < 0) durationSecs = 0;
-            } catch { }
         }
-        return durationSecs;
+        catch (System.ComponentModel.Win32Exception) { /* ffprobe not installed */ }
+        catch (IOException) { return 0; }
+
+        // Without ffprobe, validate the RIFF/WAVE header and data chunk.
+        // MP3 requires ffprobe; do NOT guess its duration from file size.
+        if (!path.EndsWith(".wav", StringComparison.OrdinalIgnoreCase)) return 0;
+        try
+        {
+            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var reader = new BinaryReader(stream);
+            if (new string(reader.ReadChars(4)) != "RIFF") return 0;
+            reader.ReadUInt32();
+            if (new string(reader.ReadChars(4)) != "WAVE") return 0;
+            uint byteRate = 0;
+            while (stream.Position + 8 <= stream.Length)
+            {
+                string id = new string(reader.ReadChars(4));
+                uint length = reader.ReadUInt32();
+                long next = stream.Position + length + (length % 2);
+                if (next > stream.Length) return 0;
+                if (id == "fmt " && length >= 16)
+                {
+                    ushort encoding = reader.ReadUInt16();
+                    reader.ReadUInt16(); reader.ReadUInt32();
+                    byteRate = reader.ReadUInt32();
+                    if (encoding != 1) return 0; // Only accept uncompressed PCM fallback.
+                }
+                if (id == "data" && byteRate != 0)
+                    return length / (double)byteRate;
+                stream.Position = next;
+            }
+        }
+        catch (IOException) { }
+        return 0;
     }
 
     private async Task GenerateSrtTask()

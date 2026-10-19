@@ -34,6 +34,9 @@ def health():
     vieneu_ready, vieneu_detail = vieneu.available
     return {
         "status": "ok",
+        "application": "DvaForDev.TtsStudio",
+        "backend_version": "3.1",
+        "backend_root": str(BASE),
         "engine": chatterbox.name,
         "ready": cb_ready or vieneu_ready,
         "detail": None if (cb_ready or vieneu_ready) else (

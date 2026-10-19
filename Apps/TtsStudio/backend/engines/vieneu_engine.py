@@ -1,6 +1,6 @@
 """Optional VieNeu-TTS v3 Turbo zero-shot Vietnamese cloning via isolated ONNX/CPU.
 
-Preserves existing Chatterbox/Edge Python dependencies. Worker is kept alive
+Preserves Chatterbox dependencies. Worker is kept alive
 so multiple preview/generation jobs reuse the loaded CPU model.
 """
 from __future__ import annotations

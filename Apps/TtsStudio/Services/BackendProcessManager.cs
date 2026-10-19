@@ -16,15 +16,15 @@ public sealed class BackendProcessManager : IAsyncDisposable
         if (IsRunning) return;
         if (await ProbeHealthAsync(token))
         {
-            OutputReceived?.Invoke("Backend TTS hiện có hoạt động. Đang dùng lại cổng 7865.");
+            OutputReceived?.Invoke(await DescribeBackendOriginAsync(token));
             return;
         }
         // Never spawn a duplicate server against a port owned by another process.
         // In particular, an unresponsive old Uvicorn must not generate Errno 10048.
         if (PortIsListening())
             throw new InvalidOperationException(
-                "Cổng 7865 đã được sử dụng nhưng API TTS không phản hồi. " +
-                "Hãy đóng backend cũ hoặc kiểm tra tiến trình đang giữ cổng.");
+                "Cổng 7865 đang được sử dụng nhưng backend TTS không phản hồi. " +
+                "Hãy kiểm tra tiến trình đang giữ cổng trước khi khởi động lại.");
         var developmentBackend = Path.GetFullPath(
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "backend"));
         var copiedBackend = Path.Combine(AppContext.BaseDirectory, "backend");
@@ -59,6 +59,42 @@ public sealed class BackendProcessManager : IAsyncDisposable
         OutputReceived?.Invoke($"Started backend (PID {_process.Id}) with {python}");
     }
 
+    private static async Task<string> DescribeBackendOriginAsync(CancellationToken token)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var reply = await http.GetAsync("http://127.0.0.1:7865/api/health", token);
+            await using var body = await reply.Content.ReadAsStreamAsync(token);
+            using var json = await JsonDocument.ParseAsync(body, cancellationToken: token);
+            var root = json.RootElement;
+            bool hasApp = root.TryGetProperty("application", out var app);
+            if (!hasApp || app.GetString() != "DvaForDev.TtsStudio")
+                return "CẢNH BÁO: Đang dùng backend cũ trên cổng 7865. " +
+                       "Các thay đổi Python trong TTS Studio mới chưa có hiệu lực.";
+            if (root.TryGetProperty("backend_root", out var directory))
+            {
+                string running = Path.GetFullPath(directory.GetString() ?? "");
+                string development = Path.GetFullPath(Path.Combine(
+                    AppContext.BaseDirectory, "..", "..", "..", "backend"));
+                string deployed = Path.GetFullPath(Path.Combine(
+                    AppContext.BaseDirectory, "backend"));
+                if (!running.Equals(development, StringComparison.OrdinalIgnoreCase) &&
+                    !running.Equals(deployed, StringComparison.OrdinalIgnoreCase))
+                    return "CẢNH BÁO: Backend trả lời từ thư mục khác: " + running;
+            }
+            return "Đã nhận diện backend TTS Studio độc lập trên cổng 7865.";
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            return "Backend trên cổng 7865 phản hồi chậm; chưa xác nhận được nguồn chạy.";
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            return "Backend trên cổng 7865 hoạt động nhưng chưa đọc được nguồn: " + e.Message;
+        }
+    }
+
     public static async Task<bool> ProbeHealthAsync(CancellationToken token)
     {
         using var probe = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
@@ -85,7 +121,11 @@ public sealed class BackendProcessManager : IAsyncDisposable
 
     public async Task ReconnectAsync(string pythonExecutable, CancellationToken token)
     {
-        if (await ProbeHealthAsync(token)) return;
+        if (await ProbeHealthAsync(token))
+        {
+            OutputReceived?.Invoke(await DescribeBackendOriginAsync(token));
+            return;
+        }
         // Only restart a child process owned by this application, not arbitrary
         // Python jobs on the machine.
         if (IsRunning) await StopAsync();
