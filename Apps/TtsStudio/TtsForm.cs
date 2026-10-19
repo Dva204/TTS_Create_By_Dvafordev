@@ -268,44 +268,47 @@ public partial class Form1 : Form
             WriteLog("Backend start: " + ex.Message);
         }
 
-        for (var i = 0; i < 30 && !lifetime.IsCancellationRequested; i++)
-        {
-            try
-            {
-                await RefreshStatus(lifetime.Token);
-                await RefreshVoices(null, lifetime.Token);
-                _ = Monitor(lifetime.Token);
-                return;
-            }
-            catch
-            {
-                try { await Task.Delay(1000, lifetime.Token); } catch { return; }
-            }
-        }
-
-        WriteLog("Backend unavailable. Follow the setup steps in README.md.");
+        // Engine initialization can exceed 30 seconds on CPU. Keep watching
+        // asynchronously until the API comes online instead of abandoning
+        // the Voice Library after a fixed startup timeout.
+        _ = Monitor(lifetime.Token);
     }
 
     private async Task Monitor(CancellationToken token)
     {
+        bool connected = false;
         while (!token.IsCancellationRequested)
         {
             try
             {
                 await RefreshStatus(token);
+                if (!connected)
+                {
+                    // Also supports an externally started backend after the UI
+                    // has already opened and initially showed an empty library.
+                    await RefreshVoices(null, token);
+                    if (lastVoiceFetchSucceeded)
+                        WriteLog($"Backend kết nối thành công. Đang hiển thị {allVoices.Count} giọng.");
+                }
+                connected = lastVoiceFetchSucceeded;
                 lastConnectionError = null;
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception ex)
             {
-                SetStatus("Backend: Offline", "GPU: Unknown");
+                connected = false;
+                SetStatus("Backend: Offline — chưa thể tải thư viện giọng", "GPU: Unknown");
                 if (lastConnectionError != ex.Message)
                 {
                     lastConnectionError = ex.Message;
-                    WriteLog(ex.Message);
+                    WriteLog("Không kết nối được backend trên cổng 7865: " + ex.Message);
                 }
             }
 
-            try { await Task.Delay(2000, token); } catch { break; }
+            try { await Task.Delay(2500, token); } catch (OperationCanceledException) { break; }
         }
     }
 
@@ -327,17 +330,22 @@ public partial class Form1 : Form
     }
 
     private List<VoiceDto> allVoices = new();
+    private bool lastVoiceFetchSucceeded;
+    private string? lastVoiceFetchError;
 
     private async Task RefreshVoices(string? q = null, CancellationToken token = default)
     {
         // Fetch from API only if it's a full refresh (q == null) or if we don't have voices yet
         if (q == null || allVoices.Count == 0)
         {
+            lastVoiceFetchSucceeded = false;
             try
             {
                 var voices = await api.GetVoicesAsync(null, token);
                 if (voices != null)
                 {
+                    lastVoiceFetchSucceeded = true;
+                    lastVoiceFetchError = null;
                     allVoices = voices.ToList();
                     var currentVoiceId = voiceComboBox.SelectedValue?.ToString();
 
@@ -398,9 +406,19 @@ public partial class Form1 : Form
                     }
                 }
             }
-            catch (Exception)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
-                // Ignore backend offline exception to prevent crash
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Keep the UI responsive but explain why the library has not
+                // loaded. Avoid repeating the same error on every reconnect.
+                if (lastVoiceFetchError != ex.Message)
+                {
+                    lastVoiceFetchError = ex.Message;
+                    WriteLog("Không thể tải Voice Library từ backend: " + ex.Message);
+                }
             }
         }
 

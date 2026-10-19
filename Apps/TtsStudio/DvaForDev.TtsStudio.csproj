@@ -8,6 +8,11 @@
     <RootNamespace>TTS_Create_By_DvaForDev</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Empty runtime folders remain visible in Solution Explorer. -->
+    <Folder Include="backend\data\voices\" />
+    <Folder Include="backend\data\jobs\" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\Shared\DvaForDev.Shared.csproj"/>
     <Content Include="backend\**\*.py;backend\requirements.txt;backend\install_vieneu_cpu.ps1"
       Exclude="backend\**\__pycache__\**\*;backend\test_*.py"
