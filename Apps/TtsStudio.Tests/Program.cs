@@ -20,6 +20,36 @@ class V4Smoke
         Directory.CreateDirectory(root);
         try
         {
+            // Backend startup can refuse connections while Python imports
+            // Chatterbox/VieNeu; transient refusal must not fail startup.
+            int probes=0;
+            BackendStartupWaiter.WaitUntilReadyAsync(
+                _=>Task.FromResult(++probes>=4),
+                ()=>false,TimeSpan.FromSeconds(2),CancellationToken.None,
+                TimeSpan.FromMilliseconds(5)).GetAwaiter().GetResult();
+            if(probes!=4)throw new Exception("Backend startup did not retry until ready");
+            bool detectedEarlyExit=false;
+            try
+            {
+                BackendStartupWaiter.WaitUntilReadyAsync(
+                    _=>Task.FromResult(false),()=>true,TimeSpan.FromSeconds(1),
+                    CancellationToken.None,TimeSpan.FromMilliseconds(5))
+                    .GetAwaiter().GetResult();
+            }
+            catch(InvalidOperationException){detectedEarlyExit=true;}
+            if(!detectedEarlyExit)throw new Exception("Backend early crash was not detected");
+            bool timedOut=false;
+            try
+            {
+                BackendStartupWaiter.WaitUntilReadyAsync(
+                    _=>Task.FromResult(false),()=>false,TimeSpan.FromMilliseconds(30),
+                    CancellationToken.None,TimeSpan.FromMilliseconds(5))
+                    .GetAwaiter().GetResult();
+            }
+            catch(TimeoutException){timedOut=true;}
+            if(!timedOut)throw new Exception("Backend startup timeout not reported");
+            Console.WriteLine("PASS: backend startup retry, early-exit detection and timeout");
+
             var store=new VoiceWorkspaceStore(Path.Combine(root,"pref.json"));
             var p=new VoiceWorkspace(true,"narrator, deep",new TtsGenerationSettings(1, .65, .65, .5,true));
             store.Set("voice123",p);
@@ -294,6 +324,9 @@ class V4Smoke
             importTxt.Invoke(form,new object[]{txt});
             if(queue.Rows.Count==0||queue.Rows.Cast<DataGridViewRow>().Any(x=>x.Tag is SubtitleCue))
                 throw new Exception("TXT import did not reset SRT metadata");
+            BatchOutputNamingTests.Run(form,root);
+            BatchOutputNamingTests.VerifyTimedSrtJoin(form,root,tone2);
+            BatchOutputNamingTests.VerifyTxtJoin(form,root,tone2);
             form.Hide();
             Console.WriteLine("PASS: TXT input still supported and clears previous SRT timing");
             Console.WriteLine("PASS: compact 1050x700 layout, 6 navigation targets");

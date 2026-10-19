@@ -23,9 +23,28 @@ public sealed class BackendProcessManager : IAsyncDisposable
         File.WriteAllText(CacheFlagPath,enabled?"1":"0");
     }
 
+    private static readonly TimeSpan StartupGracePeriod = TimeSpan.FromSeconds(120);
+
+    private async Task WaitForOwnedBackendAsync(CancellationToken token)
+    {
+        await BackendStartupWaiter.WaitUntilReadyAsync(
+            ProbeHealthAsync,
+            () => _process is null || _process.HasExited,
+            StartupGracePeriod,
+            token,
+            onProgress: elapsed => OutputReceived?.Invoke(
+                $"Đang chờ backend tải engine/Voice Library… {elapsed.TotalSeconds:F0}s"));
+        OutputReceived?.Invoke("Backend TTS đã sẵn sàng nhận yêu cầu API.");
+    }
+
     public async Task StartAsync(string pythonExecutable, CancellationToken token)
     {
-        if (IsRunning) return;
+        if (IsRunning)
+        {
+            // Existing child process can still be importing its AI engines.
+            await WaitForOwnedBackendAsync(token);
+            return;
+        }
         if (await ProbeHealthAsync(token))
         {
             OutputReceived?.Invoke(await DescribeBackendOriginAsync(token));
@@ -72,6 +91,8 @@ public sealed class BackendProcessManager : IAsyncDisposable
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
         OutputReceived?.Invoke($"Started backend (PID {_process.Id}) with {python}");
+        OutputReceived?.Invoke("Đang đợi Python khởi động API, chưa coi đây là lỗi kết nối…");
+        await WaitForOwnedBackendAsync(token);
     }
 
     private static async Task<string> DescribeBackendOriginAsync(CancellationToken token)

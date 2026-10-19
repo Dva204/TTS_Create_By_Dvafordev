@@ -51,3 +51,20 @@ Do not push until explicitly requested.
 - Switching a main section returns to its last visited subtab.
 - Internal TabPage indexes remain unchanged to preserve existing event handlers.
 - Navigation has its own regression tests at normal and compact screen sizes.
+
+## Backend startup race fix (2026-10-20)
+
+- On this Windows machine the real TTS backend needed approximately **22.6 s** to
+  listen on `127.0.0.1:7865` after starting Python. The previous UI logged
+  `actively refused` after ~2 s; this was a startup race, not missing voices.
+- WinForms now displays **Đang khởi động / kết nối** while awaiting the backend.
+- `BackendProcessManager.StartAsync` waits asynchronously (up to 120 s) for
+  `/api/health` to return OK. The wait can detect an early child-process exit.
+- Health probes do not launch duplicate Python processes and never kill a
+  backend owned by a different program. On timeout, the monitor still retries.
+- A private backend subprocess test successfully returned both engines ready
+  and **544 voices**. That subprocess was stopped after validation.
+- Closing the WinForms app also stops its owned Python process; this is the
+  currently intended lifecycle. Reopening the app can need 20-30 seconds.
+- The tests under `Apps/TtsStudio.Tests` validate retry, early exit and timeout.
+- The test did not synthesize audio or modify reference/model data.

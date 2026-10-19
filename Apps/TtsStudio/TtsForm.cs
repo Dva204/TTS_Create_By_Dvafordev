@@ -266,13 +266,19 @@ public partial class Form1 : Form
         LoadSettings();
 
         UpdateEngineSettingsUI();
+        SetStatus("Backend: Đang khởi động / kết nối...", "GPU: Đang kiểm tra");
         try
         {
             await backend.StartAsync(settings.PythonExecutable, lifetime.Token);
         }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return;
+        }
         catch (Exception ex)
         {
-            WriteLog("Backend start: " + ex.Message);
+            // Keep monitoring: externally started/slow backends can recover.
+            WriteLog("Khởi động backend: " + ex.Message);
         }
 
         // Engine initialization can exceed 30 seconds on CPU. Keep watching
@@ -307,7 +313,9 @@ public partial class Form1 : Form
             catch (Exception ex)
             {
                 connected = false;
-                SetStatus("Backend: Offline — chưa thể tải thư viện giọng", "GPU: Unknown");
+                SetStatus(backend.IsRunning
+                    ? "Backend: Đang khởi động / chờ API..."
+                    : "Backend: Chưa kết nối", "GPU: Chưa xác định");
                 if (lastConnectionError != ex.Message)
                 {
                     lastConnectionError = ex.Message;
