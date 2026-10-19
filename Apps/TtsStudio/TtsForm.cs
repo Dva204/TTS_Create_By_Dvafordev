@@ -25,6 +25,7 @@ public partial class Form1 : Form
         Text = DvaForDev.Shared.StudioBranding.TtsName;
         // Standalone TTS: no Video Editor, Whiteboard or AI Video Studio.
         mainTabControl.TabPages.Remove(tabVideoEditor);
+        InitializeUpgradeTabs();
         InitializeModernUi();
         api = new(settings);
         backend.OutputReceived += WriteLog;
@@ -72,7 +73,11 @@ public partial class Form1 : Form
         if (Controls.Find("btnSearchVoice", true).FirstOrDefault() is Button btnSearchVoice) btnSearchVoice.Click += BtnSearchVoice_Click;
         if (Controls.Find("cmbLibraryLanguage", true).FirstOrDefault() is ComboBox cmbLibLang) cmbLibLang.SelectedIndexChanged += CmbLibLang_SelectedIndexChanged;
 
-        if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView dgvVoice) dgvVoice.SelectionChanged += DgvVoiceLibrary_SelectionChanged;
+        if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView dgvVoice)
+        {
+            dgvVoice.SelectionChanged += DgvVoiceLibrary_SelectionChanged;
+            dgvVoice.SelectionChanged += (_, _) => SyncVoiceWorkspace();
+        }
 
         if (Controls.Find("dgvJobs", true).FirstOrDefault() is DataGridView dgvJobs)
         {
@@ -435,6 +440,23 @@ public partial class Form1 : Form
                     (v.Id?.ToLower().Contains(lowerQ) ?? false) ||
                     (v.Description?.ToLower().Contains(lowerQ) ?? false)
                 );
+            }
+
+            // Voice Library V3: local favorite/tag metadata does not touch voice.json.
+            if (_favoritesOnly?.Checked == true)
+                filtered = filtered.Where(v => _voiceWorkspace.IsFavorite(v.Id));
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                string lowerTags = q.Trim();
+                // Include entries matching custom tags while preserving other filters.
+                // Existing text matches remain supported.
+                filtered = allVoices.Where(v =>
+                    (v.Name?.Contains(lowerTags,StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (v.Id?.Contains(lowerTags,StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (v.Description?.Contains(lowerTags,StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    _voiceWorkspace.Get(v.Id??"").Tags.Contains(lowerTags,StringComparison.OrdinalIgnoreCase));
+                if (_favoritesOnly?.Checked == true)
+                    filtered = filtered.Where(v=>_voiceWorkspace.IsFavorite(v.Id));
             }
 
             // Language filter using comprehensive matching (supports "English (en)", "en", "English", etc.)

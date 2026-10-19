@@ -10,6 +10,7 @@ from typing import Any
 
 from engines.base import TtsEngine
 from services.voice_store import VoiceStore
+from services.audio_cache import AudioResultCache
 from models.tts import TtsGenerationSettings
 
 
@@ -27,6 +28,7 @@ class JobManager:
         self.tasks: dict[str, asyncio.Task] = {}
         # At most one heavyweight inference may run on the GPU/CPU model at a time.
         self.queue_lock = asyncio.Lock()
+        self.audio_cache = AudioResultCache(root.parent / "cache")
         self._restore_jobs()
 
     def _job_file(self, job_id: str) -> Path:
@@ -87,9 +89,14 @@ class JobManager:
                 self._set_status(job, "running")
                 reference = self.voices.reference(voice_id)
                 eng = self.engines.get(engine_name or "", self.engine)
-                # Do not cancel this asyncio.to_thread: cancellation would release
-                # queue_lock while its thread is still running model inference.
-                await asyncio.to_thread(eng.generate, text, language, reference, output, settings)
+                # Calculate the complete reference-aware key only when caching is opted in.
+                key = self.audio_cache.digest(text, voice_id, language, eng.name,
+                                              settings, reference) if self.audio_cache.enabled else None
+                cache_hit = bool(key and self.audio_cache.restore(key, output))
+                if not cache_hit:
+                    # Do not cancel to_thread; the queue_lock must remain held
+                    # until the model thread has actually finished.
+                    await asyncio.to_thread(eng.generate, text, language, reference, output, settings)
                 if job.get("cancel_requested"):
                     output.unlink(missing_ok=True)
                     self._set_status(job, "cancelled", "Đã hủy sau khi hoàn tất lượt suy luận.")
@@ -102,7 +109,7 @@ class JobManager:
                 if settings.speaker_boost and eng.name != "vieneu_v3_turbo":
                     filters.append("loudnorm")
                 ffmpeg = shutil.which("ffmpeg")
-                if ffmpeg and (filters or eng.name != "vieneu_v3_turbo"):
+                if not cache_hit and ffmpeg and (filters or eng.name != "vieneu_v3_turbo"):
                     temp_out = output.with_suffix(".tmp.wav")
                     args = [ffmpeg, "-y", "-i", str(output)]
                     if filters:
@@ -128,6 +135,10 @@ class JobManager:
                     return
                 if not output.is_file() or output.stat().st_size < 44:
                     raise RuntimeError("Engine chưa tạo được WAV hợp lệ.")
+                # Cache only finished, verified results; cancellation never creates cache.
+                if key and not cache_hit:
+                    try: self.audio_cache.remember(key, output)
+                    except OSError: pass  # A full cache volume must not fail TTS.
                 job["audio_url"] = f"/api/jobs/{job_id}/audio"
                 self._set_status(job, "completed")
         except asyncio.CancelledError:

@@ -79,6 +79,19 @@ class QueueTests(unittest.IsolatedAsyncioTestCase):
         self.manager._save_job(job)
         recovered=JobManager(self.root,self.engine,VoiceStore())
         self.assertEqual(recovered.jobs[job["id"]]["status"],"failed")
+    async def test_opt_in_cache_reuses_completed_wav(self):
+        from services.audio_cache import AudioResultCache
+        self.engine.release.set()
+        self.manager.audio_cache = AudioResultCache(self.root / "cache", enabled=True)
+        first = self.manager.create("same-text", "v1", "vi", self.settings)
+        await self.until(lambda: first["status"] == "completed")
+        second = self.manager.create("same-text", "v1", "vi", self.settings)
+        await self.until(lambda: second["status"] == "completed")
+        self.assertEqual(self.engine.calls, 1)
+        changed = self.manager.create("different-text", "v1", "vi", self.settings)
+        await self.until(lambda: changed["status"] == "completed")
+        self.assertEqual(self.engine.calls, 2)
+
     async def test_cancel_queued_does_not_execute(self):
         a=self.manager.create("a","v1","vi",self.settings)
         await self.until(lambda:a["status"]=="running")

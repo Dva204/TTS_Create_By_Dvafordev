@@ -11,6 +11,18 @@ public sealed class BackendProcessManager : IAsyncDisposable
     public event Action<string>? OutputReceived;
     public bool IsRunning => _process is { HasExited: false };
 
+    private static readonly string CacheFlagPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "DvaForDev","TtsStudio","audio-cache-enabled.txt");
+    public static bool AudioCacheEnabledNextLaunch =>
+        File.Exists(CacheFlagPath) && File.ReadAllText(CacheFlagPath).Trim()=="1";
+
+    public static void SetAudioCacheForNextLaunch(bool enabled)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(CacheFlagPath)!);
+        File.WriteAllText(CacheFlagPath,enabled?"1":"0");
+    }
+
     public async Task StartAsync(string pythonExecutable, CancellationToken token)
     {
         if (IsRunning) return;
@@ -44,6 +56,9 @@ public sealed class BackendProcessManager : IAsyncDisposable
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        // Explicit opt-in only: default is no result cache to preserve approved audio.
+        if(AudioCacheEnabledNextLaunch)
+            info.Environment["DVA_TTS_AUDIO_CACHE"]="1";
         info.ArgumentList.Add("-u");
         info.ArgumentList.Add("-m");
         info.ArgumentList.Add("uvicorn");

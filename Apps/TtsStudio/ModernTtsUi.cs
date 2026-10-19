@@ -75,8 +75,9 @@ public partial class Form1
         };
         nav.Controls.Add(menu);
         nav.Controls.Add(brand);
-        var names = new[] { "TTS / Hàng loạt", "Thư viện giọng", "Cài đặt" };
-        var symbols = new[] { "◉", "♫", "⚙" };
+        var names = new[] { "TTS / Hàng loạt", "Thư viện giọng", "Cài đặt",
+            "Clone giọng V2", "Dự án & Xuất", "SRT nâng cao", "Hệ thống V3" };
+        var symbols = new[] { "◉", "♫", "⚙", "◈", "▣", "▤", "⚙" };
         for (int i = 0; i < pages.Count; i++)
         {
             var page = pages[i];

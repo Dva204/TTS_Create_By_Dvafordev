@@ -35,7 +35,8 @@ def health():
     return {
         "status": "ok",
         "application": "DvaForDev.TtsStudio",
-        "backend_version": "3.1",
+        "backend_version": "3.2-dev",
+        "audio_cache_enabled": jobs.audio_cache.enabled,
         "backend_root": str(BASE),
         "engine": chatterbox.name,
         "ready": cb_ready or vieneu_ready,

@@ -41,6 +41,9 @@ public sealed class TtsApiClient : IDisposable
         return (await response.Content.ReadFromJsonAsync<VoiceDto>(Json, token))!;
     }
 
+    public async Task<byte[]> DownloadReferenceAsync(string id, CancellationToken token) =>
+        await _http.GetByteArrayAsync($"api/voices/{Uri.EscapeDataString(id)}/reference", token);
+
     public async Task DeleteVoiceAsync(string id, CancellationToken token)
     {
         using var response = await _http.DeleteAsync($"api/voices/{Uri.EscapeDataString(id)}", token);
