@@ -891,7 +891,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
         int id=1;
         foreach(var line in segments)
             dgv.Rows.Add((id++).ToString("D3"),"","",line,
-                voiceComboBox.Text,languageComboBox.Text,"Pending","");
+                voiceComboBox.Text,languageComboBox.Text,"Pending",
+                BatchOutputNaming.FromSourcePath(source));
         if(_importedSrtInfo != null) _importedSrtInfo.Text=$"TXT: {id-1} câu";
         WriteLog($"Đã nhập {id-1} câu TXT: {Path.GetFileName(source)}");
     }
@@ -1210,9 +1211,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 var path = Path.Combine(txtFolder.Text, filename);
                 if (!File.Exists(path)) continue;
 
-                var sourceFile = row.Cells[7].Value?.ToString();
-                if (string.IsNullOrWhiteSpace(sourceFile)) sourceFile = "000_Full_Audio";
-                else sourceFile = "000_" + sourceFile;
+                string sourceFile=BatchOutputNaming.SafeStem(
+                    row.Cells[7].Value?.ToString());
 
                 if (!groups.ContainsKey(sourceFile)) groups[sourceFile] = new List<string>();
                 groups[sourceFile].Add(path);
@@ -1226,32 +1226,44 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 var files = group.Value;
                 if (files.Count == 0) continue;
 
-                var listFile = Path.Combine(txtFolder.Text, $"file_list_{sourceName}.txt");
-                var outputAudio = Path.Combine(txtFolder.Text, $"{sourceName}.{ext}");
-                var lines = files.Select(f => $"file '{Path.GetFileName(f)}'").ToArray();
-                await File.WriteAllLinesAsync(listFile, lines, lifetime.Token);
-
-                var psi = new ProcessStartInfo("ffmpeg")
+                var listFile = Path.Combine(txtFolder.Text,
+                    "file_list_" + Guid.NewGuid().ToString("N") + ".txt");
+                var outputAudio = BatchOutputNaming.AvailablePath(
+                    txtFolder.Text,sourceName,ext);
+                var tempOutput = Path.Combine(txtFolder.Text,
+                    "." + Guid.NewGuid().ToString("N") + ".tmp." + ext);
+                try
                 {
-                    Arguments = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{outputAudio}\"",
-                    WorkingDirectory = txtFolder.Text,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true
-                };
-
-                var process = Process.Start(psi);
-                if (process != null)
-                {
-                    var errTask = process.StandardError.ReadToEndAsync();
-                    await process.WaitForExitAsync(lifetime.Token);
-                    var err = await errTask;
-                    if (process.ExitCode == 0)
+                    // Concat input entries may contain single quotes in voice names.
+                    var lines=files.Select(f =>
+                        "file '" + Path.GetFileName(f).Replace("'", "'\\''") + "'").ToArray();
+                    await File.WriteAllLinesAsync(listFile,lines,lifetime.Token);
+                    var psi = new ProcessStartInfo("ffmpeg")
                     {
-                        WriteLog($"Successfully joined {files.Count} files into {sourceName}.{ext}");
-                        try { File.Delete(listFile); } catch { }
-                    }
-                    else WriteLog($"FFmpeg join failed for {sourceName}: " + err);
+                        WorkingDirectory=txtFolder.Text,
+                        UseShellExecute=false,
+                        CreateNoWindow=true,
+                        RedirectStandardError=true
+                    };
+                    foreach(var arg in new[]{"-nostdin","-n","-f","concat","-safe","0",
+                        "-i",listFile,"-c","copy",tempOutput})
+                        psi.ArgumentList.Add(arg);
+                    using var process = Process.Start(psi) ??
+                        throw new InvalidOperationException("Không thể khởi chạy FFmpeg.");
+                    var errTask=process.StandardError.ReadToEndAsync(lifetime.Token);
+                    await process.WaitForExitAsync(lifetime.Token);
+                    var err=await errTask;
+                    if(process.ExitCode!=0 || !File.Exists(tempOutput) ||
+                       new FileInfo(tempOutput).Length==0)
+                        throw new InvalidDataException(
+                            $"Ghép audio {sourceName} thất bại: {err}");
+                    File.Move(tempOutput,outputAudio,overwrite:false);
+                    WriteLog($"Đã ghép {files.Count} đoạn thành: {Path.GetFileName(outputAudio)}");
+                }
+                finally
+                {
+                    try{File.Delete(listFile);}catch{}
+                    try{File.Delete(tempOutput);}catch{}
                 }
             }
 
@@ -1430,9 +1442,8 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
             var row = dgv.Rows[i];
             if (row.Cells[6].Value?.ToString() != "Completed") continue;
 
-            var sourceFile = row.Cells[7].Value?.ToString();
-            if (string.IsNullOrWhiteSpace(sourceFile)) sourceFile = "000_Full_Audio";
-            else sourceFile = "000_" + sourceFile;
+            string sourceFile=BatchOutputNaming.SafeStem(
+                row.Cells[7].Value?.ToString());
 
             if (!groups.ContainsKey(sourceFile)) groups[sourceFile] = new List<DataGridViewRow>();
             groups[sourceFile].Add(row);
@@ -1454,7 +1465,7 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                 // when all cues completed and audio is present.
                 var expected = dgv.Rows.Cast<DataGridViewRow>()
                     .Where(x=>(x.Cells[7].Value?.ToString()??"")==
-                        (sourceName.StartsWith("000_")?sourceName[4..]:sourceName))
+                        sourceName)
                     .ToList();
                 if(expected.Count!=group.Value.Count)
                 {
@@ -1469,7 +1480,9 @@ private void BtnBrowseOutputFolder_Click(object? sender, EventArgs e)
                     .ToArray();
                 try
                 {
-                    SrtBatchTimelineService.Validate(timed);
+                    // Generating the original subtitle timeline does not need
+                    // per-cue audio: Del Segments may already have removed it.
+                    SrtBatchTimelineService.ValidateTimings(timed);
                     if(File.Exists(srtPath))
                         throw new IOException("SRT đầu ra đã tồn tại: "+srtPath);
                     await File.WriteAllTextAsync(srtPath,

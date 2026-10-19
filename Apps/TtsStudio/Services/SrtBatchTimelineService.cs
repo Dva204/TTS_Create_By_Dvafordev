@@ -22,7 +22,7 @@ public static class SrtBatchTimelineService
     public static IReadOnlyList<SubtitleCue> Parse(string source) =>
         SrtQualityService.Read(source).OrderBy(x => x.Start).ToArray();
 
-    public static void Validate(IReadOnlyList<TimedAudioCue> cues)
+    public static void ValidateTimings(IReadOnlyList<TimedAudioCue> cues)
     {
         if (cues.Count == 0) throw new InvalidDataException("Chưa có cue SRT.");
         long lastEnd = 0;
@@ -30,12 +30,18 @@ public static class SrtBatchTimelineService
         {
             if (cue.Start < TimeSpan.Zero || cue.End <= cue.Start || cue.Start.Ticks < lastEnd)
                 throw new InvalidDataException($"Cue {cue.Index}: mốc SRT bị trùng hoặc không hợp lệ.");
-            if (!File.Exists(cue.AudioFile))
-                throw new FileNotFoundException($"Thiếu audio của cue {cue.Index}.", cue.AudioFile);
             lastEnd = cue.End.Ticks;
         }
         if (cues[^1].End.TotalHours > 6)
             throw new InvalidDataException("Timeline vượt 6 giờ; hãy chia thành nhiều dự án.");
+    }
+
+    public static void Validate(IReadOnlyList<TimedAudioCue> cues)
+    {
+        ValidateTimings(cues);
+        foreach(var cue in cues)
+            if(!File.Exists(cue.AudioFile))
+                throw new FileNotFoundException($"Thiếu audio của cue {cue.Index}.",cue.AudioFile);
     }
 
     private static long SamplePosition(TimeSpan time) =>

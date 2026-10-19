@@ -47,3 +47,34 @@ Trong trường hợp nút Join báo lỗi từ bản cũ, hãy đóng ứng d�
 chạy lại bản đã cập nhật, nhập lại file SRT và chọn cùng giọng +
 thư mục output. Tích **Bỏ qua đã có** trước khi RUN BATCH để dùng lại
 các đoạn âm thanh hợp lệ; không cần tạo lại toàn bộ.
+
+
+## Tên file xuất từ TXT và SRT
+
+File audio đã ghép lấy tên từ file nguồn ban đầu, không dùng tiền tố 000_:
+
+- Video_01.txt -> Video_01.mp3
+- Video_01.srt -> Video_01.mp3 (giữ cả khoảng nghỉ SRT)
+- Chương 1.txt -> Chương 1.mp3
+- Nhập nhiều TXT trong một thư mục -> mỗi file nguồn có một MP3 ghép cùng tên.
+- Nếu file đích đã tồn tại, dùng hậu tố _2, _3... để tránh ghi đè.
+- Xuất SRT tạo tên Video_01_subtitles.srt.
+- Các MP3 của từng câu vẫn giữ dạng 001_TenGiong.mp3 để
+  chức năng Bỏ qua đã có tiếp tục hoạt động.
+
+Nếu một Batch cũ được nhập trước bản cập nhật và cột Source File đang
+trống, hãy nhập lại TXT/SRT gốc để ứng dụng biết tên nguồn.
+Không cần xóa những MP3 đã tạo từng câu.
+
+
+## Xóa các MP3 từng câu sau khi ghép SRT
+
+- Bật **Xóa đoạn tạm** trong phần TTS nếu muốn dọn các MP3/WAV từng câu.
+- Chức năng áp dụng cho cả nhập TXT và SRT.
+- Với SRT, việc xóa diễn ra **sau khi tất cả nhóm được ghép thành công**.
+- Nếu bất kỳ nhóm nào lỗi, các MP3/WAV từng câu vẫn được giữ để thử lại.
+- File MP3/WAV đã ghép cuối và file SRT gốc không bị xóa.
+- Bạn vẫn có thể bấm **Create SRT** sau khi xóa các audio từng câu:
+  mốc bắt đầu/kết thúc phụ đề được lấy từ dữ liệu đã nhập.
+- Đây là thao tác xóa file thật, không chỉ ẩn khỏi danh sách.
+  Nếu muốn chỉnh sửa từng câu sau này, hãy để tùy chọn tắt.

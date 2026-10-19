@@ -326,6 +326,7 @@ class V4Smoke
                 throw new Exception("TXT import did not reset SRT metadata");
             BatchOutputNamingTests.Run(form,root);
             BatchOutputNamingTests.VerifyTimedSrtJoin(form,root,tone2);
+            SrtSegmentCleanupTests.Run(form,root,tone2,tone1);
             BatchOutputNamingTests.VerifyTxtJoin(form,root,tone2);
             form.Hide();
             Console.WriteLine("PASS: TXT input still supported and clears previous SRT timing");

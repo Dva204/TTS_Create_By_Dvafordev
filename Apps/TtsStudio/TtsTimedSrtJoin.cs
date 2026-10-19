@@ -12,6 +12,12 @@ public partial class Form1
             .Where(row=>!row.IsNewRow)
             .GroupBy(row=>row.Cells[7].Value?.ToString()??"SRT")
             .ToArray();
+        // Snapshot the UI option before rendering. Keep all segment files until
+        // EVERY SRT output succeeds, so a later failure cannot destroy inputs.
+        bool deleteSegments=(Controls.Find("chkDeleteSegments",true)
+            .FirstOrDefault() as CheckBox)?.Checked==true;
+        var finishedOutputs=new List<string>();
+        var renderedSegmentFiles=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var group in groups)
         {
             var rows=group.ToArray();
@@ -29,14 +35,10 @@ public partial class Form1
                 return new TimedAudioCue(timing.Number,timing.Start,timing.End,
                     timing.Text,Path.Combine(folder,filename));
             }).OrderBy(x=>x.Start).ToArray();
-            string name="000_"+group.Key;
-            foreach(char illegal in Path.GetInvalidFileNameChars())
-                name=name.Replace(illegal,'_');
+            string name=BatchOutputNaming.SafeStem(group.Key);
             string format = userSettings.OutputFormat.Equals("mp3",StringComparison.OrdinalIgnoreCase)
                 ?"mp3":"wav";
-            string result=Path.Combine(folder,name+"."+format);
-            if(File.Exists(result))
-                throw new IOException($"Đầu ra {result} đã tồn tại. Hãy đổi tên để không ghi đè.");
+            string result=BatchOutputNaming.AvailablePath(folder,name,format);
             string waveTmp=Path.Combine(folder,
                 name+"."+Guid.NewGuid().ToString("N")+".wav");
             string mp3Tmp=Path.Combine(folder,
@@ -72,6 +74,13 @@ public partial class Form1
                         throw new IOException("Lỗi mã hóa MP3: "+err);
                     File.Move(mp3Tmp,result);
                 }
+                // Only register sources for deletion after the final MP3/WAV
+                // exists and is nonempty. The source SRT file is never included.
+                if(!File.Exists(result) || new FileInfo(result).Length<=44)
+                    throw new IOException("File ghép SRT đầu ra chưa hợp lệ, giữ lại audio từng câu.");
+                finishedOutputs.Add(Path.GetFullPath(result));
+                foreach(var cue in cues)
+                    renderedSegmentFiles.Add(Path.GetFullPath(cue.AudioFile));
                 WriteLog($"Đã ghép SRT giữ nguyên vị trí/ngắt nghỉ: {result}");
                 // Keeping segment audio is safer for later script edits.
             }
@@ -80,6 +89,46 @@ public partial class Form1
                 try{File.Delete(waveTmp);}catch{}
                 try{File.Delete(mp3Tmp);}catch{}
             }
+        }
+
+        if(deleteSegments && finishedOutputs.Count==groups.Length)
+        {
+            string outputFolder=Path.GetFullPath(folder)
+                .TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar)
+                +Path.DirectorySeparatorChar;
+            var protectedOutputs=new HashSet<string>(finishedOutputs,
+                StringComparer.OrdinalIgnoreCase);
+            int removed=0, errors=0;
+            foreach(var segment in renderedSegmentFiles)
+            {
+                // Delete only plain audio filenames directly inside the batch
+                // output directory, never external files or merged recordings.
+                string full=Path.GetFullPath(segment);
+                if(!full.StartsWith(outputFolder,StringComparison.OrdinalIgnoreCase) ||
+                   !string.Equals(
+                       Path.GetDirectoryName(full)?.TrimEnd(Path.DirectorySeparatorChar),
+                       outputFolder.TrimEnd(Path.DirectorySeparatorChar),
+                       StringComparison.OrdinalIgnoreCase) ||
+                   protectedOutputs.Contains(full) ||
+                   Path.GetExtension(full).ToLowerInvariant() is not (".mp3" or ".wav"))
+                {
+                    WriteLog("Bỏ qua đường dẫn audio không an toàn: "+full);
+                    errors++;
+                    continue;
+                }
+                try
+                {
+                    if(File.Exists(full))
+                    {
+                        File.Delete(full);
+                        removed++;
+                    }
+                }
+                catch(IOException ex){errors++;WriteLog("Không thể xóa đoạn tạm: "+ex.Message);}
+                catch(UnauthorizedAccessException ex){errors++;WriteLog("Không có quyền xóa đoạn tạm: "+ex.Message);}
+            }
+            WriteLog($"SRT: Đã xóa {removed}/{renderedSegmentFiles.Count} file audio từng câu."
+                +(errors>0?$" Còn {errors} file chưa thể xóa.":""));
         }
     }
 }
