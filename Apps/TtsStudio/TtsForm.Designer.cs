@@ -9,7 +9,7 @@ partial class Form1
     // =========================================================
     // MAIN
     // =========================================================
-    private ModernTabControl mainTabControl = null!;
+    private TabControl mainTabControl = null!;
     private TabPage tabTtsBatch = null!;
     private TabPage tabVoiceLibrary = null!;
     private TabPage tabSettings = null!;
@@ -278,7 +278,7 @@ partial class Form1
         DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle3 = new DataGridViewCellStyle();
         DataGridViewCellStyle dataGridViewCellStyle4 = new DataGridViewCellStyle();
-        mainTabControl = new ModernTabControl();
+        mainTabControl = new TabControl();
         tabTtsBatch = new TabPage();
         ttsRootLayout = new TableLayoutPanel();
         ttsTopLayout = new TableLayoutPanel();

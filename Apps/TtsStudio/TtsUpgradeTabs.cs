@@ -64,15 +64,9 @@ public partial class Form1
 
     private void InitializeUpgradeTabs()
     {
-        var projectTab = new TabPage("Dự án & Xuất");
-        var srtTab = new TabPage("SRT nâng cao");
         var backendTab = new TabPage("Hệ thống V3");
-        mainTabControl.TabPages.Add(projectTab);
-        mainTabControl.TabPages.Add(srtTab);
         mainTabControl.TabPages.Add(backendTab);
         BuildVoiceLibraryV3Toolbar();
-        BuildProjectTab(projectTab);
-        BuildSrtTab(srtTab);
         BuildBackendTab(backendTab);
     }
 
@@ -80,6 +74,27 @@ public partial class Form1
     {
         var table=Controls.Find("dgvVoiceLibrary",true).OfType<DataGridView>().FirstOrDefault();
         if(table?.Parent is null)return;
+        // Dedicated, always-visible favorite marker. Click the star to toggle it.
+        if (!table.Columns.Contains("voiceFavoriteMarker"))
+        {
+            var star = new DataGridViewTextBoxColumn {
+                Name = "voiceFavoriteMarker", HeaderText = "★", Width = 48,
+                MinimumWidth = 48, AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                DefaultCellStyle = new DataGridViewCellStyle {
+                    Alignment = DataGridViewContentAlignment.MiddleCenter,
+                    Font = new Font("Segoe UI Symbol", 15, FontStyle.Bold),
+                    ForeColor = Color.DarkGoldenrod
+                }
+            };
+            table.Columns.Add(star);
+            star.DisplayIndex = 0;
+            table.CellClick += (_, e) => {
+                if (e.RowIndex < 0 || e.ColumnIndex != star.Index) return;
+                if (table.Rows[e.RowIndex].Tag is not VoiceDto voice) return;
+                ToggleVoiceFavorite(voice);
+            };
+        }
         var bar=Toolbar(43);
         bar.BackColor=Color.FromArgb(250,252,253);
         _favoritesOnly=new CheckBox {Text="Chỉ giọng yêu thích",
@@ -88,6 +103,7 @@ public partial class Form1
             _ = RefreshVoices((Controls.Find("txtLibrarySearch",true)
                 .OfType<TextBox>().FirstOrDefault()?.Text),lifetime.Token);
         bar.Controls.Add(_favoritesOnly);
+        bar.Controls.Add(ActionButton("Import Folder", () => _ = ImportVoiceFoldersAsync(), 145));
         bar.Controls.Add(ActionButton("Yêu thích / Bỏ thích", ToggleSelectedVoiceFavorite, 170));
         bar.Controls.Add(ActionButton("Sao lưu thư viện giọng",()=>_ = BackupVoiceLibraryAsync(),185));
         var parent=table.Parent;
@@ -109,11 +125,24 @@ public partial class Form1
     {
         var voice=CurrentLibraryVoice();
         if (voice is null){MessageBox.Show(this,"Hãy chọn một giọng trước.");return;}
-        var value=_voiceWorkspace.Get(voice.Id);
-        _voiceWorkspace.Set(voice.Id,value with {Favorite=!value.Favorite});
-        WriteLog($"{voice.Name}: "+(!value.Favorite?"Đã yêu thích":"Đã bỏ yêu thích"));
-        if(_favoritesOnly?.Checked==true)
-            _ = RefreshVoices(null,lifetime.Token);
+        ToggleVoiceFavorite(voice);
+    }
+
+    private void ToggleVoiceFavorite(VoiceDto voice)
+    {
+        var value = _voiceWorkspace.Get(voice.Id);
+        var favorite = !value.Favorite;
+        _voiceWorkspace.Set(voice.Id, value with { Favorite = favorite });
+        WriteLog($"{voice.Name}: " + (favorite ? "Đã yêu thích" : "Đã bỏ yêu thích"));
+        if (Controls.Find("dgvVoiceLibrary", true).FirstOrDefault() is DataGridView grid)
+        {
+            foreach (DataGridViewRow row in grid.Rows)
+                if (row.Tag is VoiceDto item && item.Id == voice.Id)
+                    row.Cells["voiceFavoriteMarker"].Value = favorite ? "★" : "☆";
+        }
+        if (_favoritesOnly?.Checked == true)
+            _ = RefreshVoices(Controls.Find("txtLibrarySearch", true).OfType<TextBox>().FirstOrDefault()?.Text, lifetime.Token);
+        SyncVoiceWorkspace();
     }
 
     private async Task BackupVoiceLibraryAsync()

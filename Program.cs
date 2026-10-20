@@ -10,7 +10,7 @@ namespace TTS_Create_By_DvaForDev
             // Open as a normal resizable window instead of maximizing on startup.
             using var mainWindow = new Form1 {
                 StartPosition = FormStartPosition.CenterScreen,
-                WindowState = FormWindowState.Maximized
+                WindowState = FormWindowState.Normal
             };
             Application.Run(mainWindow);
         }

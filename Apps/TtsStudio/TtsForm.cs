@@ -26,7 +26,7 @@ public partial class Form1 : Form
         // Standalone TTS: no Video Editor, Whiteboard or AI Video Studio.
         mainTabControl.TabPages.Remove(tabVideoEditor);
         InitializeUpgradeTabs();
-        InitializeModernUi();
+        InitializeNativeWinFormsUi();
         api = new(settings);
         backend.OutputReceived += WriteLog;
         FormClosing += Form1_FormClosing;
@@ -484,6 +484,8 @@ public partial class Form1 : Form
             {
                 int idx = dgv.Rows.Add(v.Name, v.Id, v.Language, v.Gender, v.CreatedAt);
                 dgv.Rows[idx].Tag = v;
+                if (dgv.Columns.Contains("voiceFavoriteMarker"))
+                    dgv.Rows[idx].Cells["voiceFavoriteMarker"].Value = _voiceWorkspace.IsFavorite(v.Id) ? "★" : "☆";
             }
 
             // Update count label if present

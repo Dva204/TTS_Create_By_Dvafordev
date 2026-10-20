@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "DvaForDev.TtsStudio/1.0.0": {
+        "dependencies": {
+          "DvaForDev.Shared": "1.0.0"
+        },
+        "runtime": {
+          "DvaForDev.TtsStudio.dll": {}
+        }
+      },
+      "DvaForDev.Shared/1.0.0": {
+        "runtime": {
+          "DvaForDev.Shared.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "DvaForDev.TtsStudio/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "DvaForDev.Shared/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

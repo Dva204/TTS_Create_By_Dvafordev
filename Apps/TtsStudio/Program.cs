@@ -11,7 +11,7 @@ internal static class Program
         using var form = new Form1 {
             Text = DvaForDev.Shared.StudioBranding.TtsName,
             StartPosition = FormStartPosition.CenterScreen,
-            WindowState = FormWindowState.Maximized
+            WindowState = FormWindowState.Normal,
         };
         Application.Run(form);
     }
